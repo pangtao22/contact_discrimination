@@ -60,6 +60,17 @@ list(APPEND CMAKE_PREFIX_PATH "${PYTHON_EXEC_PREFIX}")
 find_package(PythonLibs ${FIND_PYTHON_INTERP_VERSION} EXACT MODULE REQUIRED)
 
 find_package(drake CONFIG REQUIRED)
+find_package(FCL CONFIG REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(assimp CONFIG REQUIRED)
+find_package(osqp REQUIRED)
+find_package(lcm REQUIRED)
+find_library(ASSIMP_LIBRARY NAMES assimp PATHS
+        /usr/lib64
+        /usr/lib
+        /usr/local/lib
+        /opt/local/lib
+        ${CMAKE_SOURCE_DIR}/lib)
 
 get_filename_component(PYTHONPATH
   "${drake_DIR}/../../python${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}/site-packages"

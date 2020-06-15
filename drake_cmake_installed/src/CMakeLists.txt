@@ -32,9 +32,10 @@
 
 add_subdirectory(find_resource)
 add_subdirectory(particles)
-add_subdirectory(pcl)
+#add_subdirectory(pcl)
 add_subdirectory(simple_bindings)
 add_subdirectory(simple_continuous_time_system)
+add_subdirectory(contact_localization)
 
 add_test(NAME import_all_test COMMAND
   "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/import_all_test.py"
