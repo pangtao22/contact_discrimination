@@ -143,25 +143,36 @@ void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
     lambda_star[i] = -(yi < 0 ? yi : 0);
   }
 
-  MatrixXd A_inverse(nx + n_lambda, nx + n_lambda);
-  VectorXd h(nx);
-  A_inverse.setZero();
-  h.setZero();
+  VectorXd a0(nx);
+  a0.setZero();
 
-  A_inverse.topLeftCorner(nx, nx) = Q;
-  A_inverse.topRightCorner(nx, n_lambda) = G.transpose();
-  A_inverse.bottomLeftCorner(n_lambda, nx) = lambda_star.asDiagonal() * G;
-  A_inverse.bottomRightCorner(n_lambda, n_lambda).diagonal() =
-      G * (*x_star) - h;
+  if(lambda_star.norm() > 1e-6) {
+    // When the inequlaity constraints are tight.
+    MatrixXd A_inverse(nx + n_lambda, nx + n_lambda);
+    VectorXd h(nx);
+    A_inverse.setZero();
+    h.setZero();
 
-  MatrixXd A = A_inverse.inverse();
-  const MatrixXd& A11 = A.topLeftCorner(nx, nx);
+    A_inverse.topLeftCorner(nx, nx) = Q;
+    A_inverse.topRightCorner(nx, n_lambda) = G.transpose();
+    A_inverse.bottomLeftCorner(n_lambda, nx) = lambda_star.asDiagonal() * G;
+    A_inverse.bottomRightCorner(n_lambda, n_lambda).diagonal() =
+        G * (*x_star) - h;
 
-  Eigen::RowVectorXd a1 = 0.5 * x_star->transpose() -
-                          (x_star->transpose() * Q + b.transpose()) * A11;
+    MatrixXd A = A_inverse.inverse();
+    const MatrixXd& A11 = A.topLeftCorner(nx, nx);
+    a0 = A11.transpose() * (b + Q * (*x_star));
+//    cout << "large multipliers\n" << endl;
+  }
 
+  Eigen::RowVectorXd a1 = 0.5 * x_star->transpose() - a0.transpose();
   *dlDQ = a1.transpose() * x_star->transpose();
-  *dldb = *x_star + A11.transpose() * (b + Q * (*x_star));
+  *dldb = *x_star - a0;
+
+  //  cout << "A_inverse\n" << A_inverse << endl;
+//  cout << "A\n" << A << endl;
+//  cout << "A11\n" << A11 << endl;
+//  cout << "a1\n" << a1 << endl;
 }
 
 OsqpWrapper::~OsqpWrapper() {
