@@ -2,12 +2,17 @@
 
 #include <Eigen/Dense>
 #include <osqp.h>
+#include <drake/common/eigen_types.h>
 
 class OsqpWrapper {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(OsqpWrapper);
   explicit OsqpWrapper(size_t x_size);
-  void Solve(const Eigen::Ref<Eigen::MatrixXd>& P,
-             const Eigen::Ref<Eigen::VectorXd>& q);
+  void Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
+             const Eigen::Ref<Eigen::VectorXd>& b,
+             drake::EigenPtr<Eigen::VectorXd> x_star,
+             drake::EigenPtr<Eigen::MatrixXd> dlDQ,
+             drake::EigenPtr<Eigen::VectorXd> dldb);
   ~OsqpWrapper();
 
  private:

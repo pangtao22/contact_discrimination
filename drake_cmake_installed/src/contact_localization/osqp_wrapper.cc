@@ -1,17 +1,20 @@
+#include "osqp_wrapper.h"
+
 #include <iostream>
 #include <numeric>
 
-#include "osqp_wrapper.h"
-
+using Eigen::Map;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
 using std::cout;
 using std::endl;
 
 template <class T>
 void PrintArray(T* ptr, size_t size, const std::string& name = "") {
-  if(!name.empty()) {
+  if (!name.empty()) {
     cout << name << ": ";
   }
-  for(size_t i = 0; i < size; i++) {
+  for (size_t i = 0; i < size; i++) {
     cout << *(ptr + i) << " ";
   }
   cout << endl;
@@ -29,7 +32,7 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
 
   A_x_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * A_nnz_));
   A_i_ = static_cast<c_int*>(c_malloc(sizeof(c_float) * A_nnz_));
-  A_p_ =  static_cast<c_int*>(c_malloc(sizeof(c_float) * (num_vars_ + 1)));
+  A_p_ = static_cast<c_int*>(c_malloc(sizeof(c_float) * (num_vars_ + 1)));
 
   q_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * num_vars_));
   l_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * num_vars_));
@@ -48,11 +51,11 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   }
 
   P_p_[0] = 0;
-  for(size_t i = 1; i < num_vars_ + 1; i++) {
-    P_p_[i] = P_p_[i-1] + i;
+  for (size_t i = 1; i < num_vars_ + 1; i++) {
+    P_p_[i] = P_p_[i - 1] + i;
   }
 
-  for(size_t i = 0; i < num_vars_; i++) {
+  for (size_t i = 0; i < num_vars_; i++) {
     A_x_[i] = 1;
     A_i_[i] = i;
     A_p_[i] = i;
@@ -61,13 +64,13 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   }
   A_p_[num_vars_] = num_vars_;
 
-//    PrintArray(P_i_, P_nnz_, "P_i");
-//    PrintArray(P_p_, num_vars_ + 1, "P_p");
-//    PrintArray(A_x_, num_vars_, "A_x");
-//    PrintArray(A_i_, num_vars_, "A_i");
-//    PrintArray(A_p_, num_vars_ + 1, "A_p_");
-//    PrintArray(l_, num_vars_, "l");
-//    PrintArray(u_, num_vars_, "u");
+  //    PrintArray(P_i_, P_nnz_, "P_i");
+  //    PrintArray(P_p_, num_vars_ + 1, "P_p");
+  //    PrintArray(A_x_, num_vars_, "A_x");
+  //    PrintArray(A_i_, num_vars_, "A_i");
+  //    PrintArray(A_p_, num_vars_ + 1, "A_p_");
+  //    PrintArray(l_, num_vars_, "l");
+  //    PrintArray(u_, num_vars_, "u");
 
   // Populate data.
   if (data_) {
@@ -91,34 +94,74 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   assert(osqp_setup(&work_, data_, settings_) == 0);
 }
 
-void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& P,
-           const Eigen::Ref<Eigen::VectorXd>& q) {
+void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
+                        const Eigen::Ref<Eigen::VectorXd>& b,
+                        drake::EigenPtr<Eigen::VectorXd> x_star,
+                        drake::EigenPtr<Eigen::MatrixXd> dlDQ,
+                        drake::EigenPtr<Eigen::VectorXd> dldb) {
   size_t idx = 0;
   for (size_t i = 0; i < num_vars_; i++) {
     for (size_t j = i; j < num_vars_; j++) {
-      P_x_new_[idx] = P(i, j);
+      P_x_new_[idx] = Q(i, j);
       idx++;
     }
   }
 
-  for(size_t i = 0; i < num_vars_; i++) {
-    q_new_[i] = q[i];
+  for (size_t i = 0; i < num_vars_; i++) {
+    q_new_[i] = b[i];
   }
 
-  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
-  PrintArray(q_new_.data(), q_new_.size(), "q");
+//  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
+//  PrintArray(q_new_.data(), q_new_.size(), "q");
 
   osqp_update_P(work_, P_x_new_.data(), OSQP_NULL, P_nnz_);
   osqp_update_lin_cost(work_, q_new_.data());
 
   // Solve Problem
   osqp_solve(work_);
-//    cout << "Status: " << work_->info->status << endl;
-//    cout << "Status val: " << work_->info->status_val << endl;
-//    cout << "Runtime: " << work_->info->run_time << endl;
-//    cout << "Obj: " << work_->info->obj_val << endl;
-//    PrintArray(work_->solution->x, num_vars_, "x");
-//    PrintArray(work_->solution->y, num_vars_, "y");
+//  cout << "Status: " << work_->info->status << endl;
+//  cout << "Status val: " << work_->info->status_val << endl;
+//  cout << "Runtime: " << work_->info->run_time << endl;
+//  cout << "Obj: " << work_->info->obj_val << endl;
+//  PrintArray(work_->solution->x, num_vars_, "x");
+//  PrintArray(work_->solution->y, num_vars_, "y");
+
+  // Extract solution.
+  assert(work_->info->status_val == 1);
+  const size_t nx = work_->data->n;
+  const size_t n_lambda = work_->data->m;
+  *x_star = Map<VectorXd>(work_->solution->x, nx);
+
+  // Gradient
+  MatrixXd G(n_lambda, n_lambda);
+  G.setIdentity();
+  G *= -1;
+
+  VectorXd lambda_star(n_lambda);
+  for (size_t i = 0; i < n_lambda; i++) {
+    double yi = (work_->solution->y)[i];
+    lambda_star[i] = -(yi < 0 ? yi : 0);
+  }
+
+  MatrixXd A_inverse(nx + n_lambda, nx + n_lambda);
+  VectorXd h(nx);
+  A_inverse.setZero();
+  h.setZero();
+
+  A_inverse.topLeftCorner(nx, nx) = Q;
+  A_inverse.topRightCorner(nx, n_lambda) = G.transpose();
+  A_inverse.bottomLeftCorner(n_lambda, nx) = lambda_star.asDiagonal() * G;
+  A_inverse.bottomRightCorner(n_lambda, n_lambda).diagonal() =
+      G * (*x_star) - h;
+
+  MatrixXd A = A_inverse.inverse();
+  const MatrixXd& A11 = A.topLeftCorner(nx, nx);
+
+  Eigen::RowVectorXd a1 = 0.5 * x_star->transpose() -
+                          (x_star->transpose() * Q + b.transpose()) * A11;
+
+  *dlDQ = a1.transpose() * x_star->transpose();
+  *dldb = *x_star + A11.transpose() * (b + Q * (*x_star));
 }
 
 OsqpWrapper::~OsqpWrapper() {
@@ -137,4 +180,3 @@ OsqpWrapper::~OsqpWrapper() {
   c_free(data_);
   c_free(settings_);
 }
-
