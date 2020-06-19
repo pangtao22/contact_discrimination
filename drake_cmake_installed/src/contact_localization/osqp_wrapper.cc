@@ -94,11 +94,10 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   assert(osqp_setup(&work_, data_, settings_) == 0);
 }
 
-void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
-                        const Eigen::Ref<Eigen::VectorXd>& b,
-                        drake::EigenPtr<Eigen::VectorXd> x_star,
-                        drake::EigenPtr<Eigen::MatrixXd> dlDQ,
-                        drake::EigenPtr<Eigen::VectorXd> dldb) {
+double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
+                          const Eigen::Ref<Eigen::VectorXd>& b,
+                          drake::EigenPtr<Eigen::VectorXd> x_star) const {
+  // Update data.
   size_t idx = 0;
   for (size_t i = 0; i < num_vars_; i++) {
     for (size_t j = i; j < num_vars_; j++) {
@@ -110,27 +109,40 @@ void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
   for (size_t i = 0; i < num_vars_; i++) {
     q_new_[i] = b[i];
   }
-
-//  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
-//  PrintArray(q_new_.data(), q_new_.size(), "q");
+  //  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
+  //  PrintArray(q_new_.data(), q_new_.size(), "q");
 
   osqp_update_P(work_, P_x_new_.data(), OSQP_NULL, P_nnz_);
   osqp_update_lin_cost(work_, q_new_.data());
 
   // Solve Problem
   osqp_solve(work_);
-//  cout << "Status: " << work_->info->status << endl;
-//  cout << "Status val: " << work_->info->status_val << endl;
-//  cout << "Runtime: " << work_->info->run_time << endl;
-//  cout << "Obj: " << work_->info->obj_val << endl;
-//  PrintArray(work_->solution->x, num_vars_, "x");
-//  PrintArray(work_->solution->y, num_vars_, "y");
 
   // Extract solution.
   assert(work_->info->status_val == 1);
+  *x_star = Map<VectorXd>(work_->solution->x, work_->data->n);
+
+  return work_->info->obj_val;
+}
+
+double OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd>& Q,
+                                const Eigen::Ref<Eigen::VectorXd>& b,
+                                drake::EigenPtr<Eigen::VectorXd> x_star,
+                                drake::EigenPtr<Eigen::MatrixXd> dlDQ,
+                                drake::EigenPtr<Eigen::VectorXd> dldb) const {
+
+  //  cout << "Status: " << work_->info->status << endl;
+  //  cout << "Status val: " << work_->info->status_val << endl;
+  //  cout << "Runtime: " << work_->info->run_time << endl;
+  //  cout << "Obj: " << work_->info->obj_val << endl;
+  //  PrintArray(work_->solution->x, num_vars_, "x");
+  //  PrintArray(work_->solution->y, num_vars_, "y");
+
+  // Solve problem
+  Solve(Q, b, x_star);
+
   const size_t nx = work_->data->n;
   const size_t n_lambda = work_->data->m;
-  *x_star = Map<VectorXd>(work_->solution->x, nx);
 
   // Gradient
   MatrixXd G(n_lambda, n_lambda);
@@ -146,7 +158,7 @@ void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
   VectorXd a0(nx);
   a0.setZero();
 
-  if(lambda_star.norm() > 1e-6) {
+  if (lambda_star.norm() > 1e-6) {
     // When the inequlaity constraints are tight.
     MatrixXd A_inverse(nx + n_lambda, nx + n_lambda);
     VectorXd h(nx);
@@ -162,17 +174,19 @@ void OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
     MatrixXd A = A_inverse.inverse();
     const MatrixXd& A11 = A.topLeftCorner(nx, nx);
     a0 = A11.transpose() * (b + Q * (*x_star));
-//    cout << "large multipliers\n" << endl;
+    //    cout << "large multipliers\n" << endl;
   }
 
   Eigen::RowVectorXd a1 = 0.5 * x_star->transpose() - a0.transpose();
   *dlDQ = a1.transpose() * x_star->transpose();
-  *dldb = *x_star - a0;
+  *dldb = -a0 + *x_star;
 
   //  cout << "A_inverse\n" << A_inverse << endl;
-//  cout << "A\n" << A << endl;
-//  cout << "A11\n" << A11 << endl;
-//  cout << "a1\n" << a1 << endl;
+  //  cout << "A\n" << A << endl;
+  //  cout << "A11\n" << A11 << endl;
+  //  cout << "a1\n" << a1 << endl;
+
+  return work_->info->obj_val;
 }
 
 OsqpWrapper::~OsqpWrapper() {

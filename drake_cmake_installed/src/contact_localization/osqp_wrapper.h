@@ -8,11 +8,14 @@ class OsqpWrapper {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(OsqpWrapper);
   explicit OsqpWrapper(size_t x_size);
-  void Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
+  double SolveGradient(const Eigen::Ref<Eigen::MatrixXd>& Q,
              const Eigen::Ref<Eigen::VectorXd>& b,
              drake::EigenPtr<Eigen::VectorXd> x_star,
              drake::EigenPtr<Eigen::MatrixXd> dlDQ,
-             drake::EigenPtr<Eigen::VectorXd> dldb);
+             drake::EigenPtr<Eigen::VectorXd> dldb) const;
+  double Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
+               const Eigen::Ref<Eigen::VectorXd>& b,
+               drake::EigenPtr<Eigen::VectorXd> x_star) const;
   ~OsqpWrapper();
 
  private:
@@ -35,6 +38,6 @@ class OsqpWrapper {
   c_float* l_{nullptr};
   c_float* u_{nullptr};
 
-  std::vector<c_float> P_x_new_{};
-  std::vector<c_float> q_new_{};
+  mutable std::vector<c_float> P_x_new_{};
+  mutable std::vector<c_float> q_new_{};
 };

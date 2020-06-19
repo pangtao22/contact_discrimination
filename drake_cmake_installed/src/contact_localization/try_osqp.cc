@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
   VectorXd x_star(num_vars), dldb(num_vars);
   MatrixXd dldQ(num_vars, num_vars);
 
-  qp_solver.Solve(P, b, &x_star, &dldQ, &dldb);
+  qp_solver.SolveGradient(P, b, &x_star, &dldQ, &dldb);
   cout << "x_star\n" << x_star << endl;
   cout << "dldb\n" << dldb << endl;
   cout << "dldQ\n" << dldQ << endl;
