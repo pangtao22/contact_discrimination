@@ -28,7 +28,7 @@ int main() {
   cout << mesh.num_primitives() << " " << mesh.num_vertices() << endl;
   cout << "End of mesh info" << endl;
 
-  std::shared_ptr<Model> geom1 = std::make_shared<Model>();
+  auto geom1 = std::make_shared<Model>();
   // add the mesh data into the BVHModel structure
   geom1->beginModel();
   geom1->addSubModel(mesh.vertices_, mesh.triangles_);
@@ -44,39 +44,42 @@ int main() {
   auto geom2 = std::make_shared<Sphered>(1e-3);
   auto* obj1 = new CollisionObjectd(geom1);
   auto* obj2 = new CollisionObjectd(geom2);
-  obj2->setTranslation(Vector3d(0, 0, 0.2));
 
   DistanceRequestd request;
-  DistanceResultd result;
 
-  auto start = std::chrono::high_resolution_clock::now();
-  distance(obj1, obj2, request, result);
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration = duration_cast<std::chrono::microseconds>(end - start);
-  cout << "time " << duration.count() << endl;
+  std::vector<Vector3d> p_positions = {Vector3d(0, 0, 0.2),
+                                       Vector3d(0.2, -0.01, 0.01),
+                                       Vector3d(-0.2, -0.01, 0.01)};
 
-  obj2->setTranslation(Vector3d(0.2, 0, 0));
-  start = std::chrono::high_resolution_clock::now();
-  distance(obj1, obj2, request, result);
-  end = std::chrono::high_resolution_clock::now();
-  duration = duration_cast<std::chrono::microseconds>(end - start);
-  cout << "time " << duration.count() << endl;
+  for (const auto& p : p_positions) {
+    obj2->setTranslation(p);
+    auto start = std::chrono::high_resolution_clock::now();
+    DistanceResultd result;
 
-  obj2->setTranslation(Vector3d(-0.2, 0, 0));
-  start = std::chrono::high_resolution_clock::now();
-  distance(obj1, obj2, request, result);
-  end = std::chrono::high_resolution_clock::now();
-  duration = duration_cast<std::chrono::microseconds>(end - start);
-  cout << "time " << duration.count() << endl;
+    distance(obj1, obj2, request, result);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = duration_cast<std::chrono::microseconds>(end - start);
+    cout << endl << "Collision result" << endl;
+    cout << "time " << duration.count() << endl;
+    cout << result.min_distance << endl;
+    cout << result.nearest_points[0] << endl;
+    cout << result.nearest_points[1] << endl;
+    cout << result.b1 << endl;
+    auto p0 = mesh.get_primitive(result.b1);
+    cout << p0[0] << " " << p0[1] << " " << p0[2] << endl;
+    cout << result.b2 << endl;
 
-  cout << "Collision result" << endl;
-  cout << result.min_distance << endl;
-  cout << result.nearest_points[0] << endl;
-  cout << result.nearest_points[1] << endl;
-  cout << result.b1 << endl;
-  auto p = mesh.get_primitive(result.b1);
-  cout << p[0] << " " << p[1] << " " << p[2] << endl;
-  cout << result.b2 << endl;
+    cout << "Normals:" << endl;
+    cout << "Face: " << mesh.CalcFaceNormal(result.b1).transpose() << endl;
+    cout
+        << "Barycentric coordinates: "
+        << mesh.CalcBarycentric(result.b1, result.nearest_points[0]).transpose()
+        << endl;
+    cout
+        << "Barycentric normal: "
+        << mesh.CalcPointNormal(result.b1, result.nearest_points[0]).transpose()
+        << endl;
+  }
 
   return 0;
 }
