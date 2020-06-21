@@ -1,0 +1,113 @@
+#include <drake/common/find_resource.h>
+#include <yaml-cpp/yaml.h>
+
+#include "gradient_calculator.h"
+#include "proximity_wrapper.h"
+
+using Eigen::MatrixXd;
+using Eigen::Vector3d;
+using Eigen::VectorXd;
+using std::cout;
+using std::endl;
+
+const char kIiwa7Config[] =
+    "/Users/pangtao/PycharmProjects/contact_aware_control"
+    "/contact_discrimination/config_iiwa7.yml";
+
+const char kLink6MeshPath[] =
+    "/Users/pangtao/PycharmProjects/contact_aware_control"
+    "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
+
+int main() {
+  YAML::Node config = YAML::LoadFile(kIiwa7Config);
+
+  GradientCalculator calculator(
+      drake::FindResourceOrThrow(kIiwaSdf),
+      config["model_instance_name"].as<std::string>(),
+      config["link_names"].as<std::vector<std::string>>(),
+      config["num_friction_cone_rays"].as<size_t>());
+
+  const double epsilon = 5e-4;
+  ProximityWrapper p_query(kLink6MeshPath, epsilon);
+
+  const size_t nq = 7;
+  VectorXd q(nq);
+  q << -0.47839296, -0.07140746, -1.62651793, 1.37309486, 0.22398543,
+      0.67425391, 2.79916161;
+  const size_t contact_link_idx = 6;  // link 6
+  VectorXd tau_ext(nq);
+  tau_ext << 2.19172843, -2.52495118, 2.1875039, -2.28800535, 0.19415752,
+      0.14975149, 0.;
+
+  // point on z axis
+    Vector3d p_LQ_L(0.0054828, -0.00315267, 0.0649383);
+    Vector3d normal_L(0.0329616, 0.114744, 0.992848);
+
+  // point on y axis
+//  Vector3d p_LQ_L(-3e-06, -0.08533, 0.011023);
+//  Vector3d normal_L(0.0336766, -0.986436, -0.160653);
+
+  Vector3d dldp;
+  double fy;
+  Vector3d dlduv;
+
+  size_t iter_count{0};
+  while (iter_count < 20) {
+    auto start = std::chrono::high_resolution_clock::now();
+    calculator.CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext, &dldp,
+                        &fy);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = duration_cast<std::chrono::microseconds>(end - start);
+
+    dlduv = dldp - normal_L * dldp.dot(normal_L);
+    cout << "Iteration: " << iter_count << endl;
+    cout << "normal: " << normal_L.transpose() << endl;
+    cout << "dldp: " << dldp.transpose() << endl;
+    cout << "dlduv: " << dlduv.transpose() << endl;
+    cout << "fy: " << fy << endl;
+    cout << "Gradient time: " << duration.count() << endl;
+    if (dlduv.norm() < 1e-3) {
+      break;
+    }
+
+    start = std::chrono::high_resolution_clock::now();
+    // Line search
+    double alpha = 0.4;
+    double beta = 0.9;
+    double t = std::min(0.02 / dlduv.norm(), 1.);
+    size_t line_search_steps = 0;
+    while (calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv,
+                                    -normal_L, tau_ext) >
+           fy - alpha * t * dlduv.squaredNorm()) {
+      t *= beta;
+      line_search_steps++;
+    }
+    p_LQ_L += -t * dlduv;
+
+    end = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(end - start);
+    cout << "Line search steps: " << line_search_steps << endl;
+    cout << "Step size t: " << t << endl;
+    cout << "Line search time: " << duration.count() << endl << endl;
+
+    // Project p_LQ_L back to mesh
+    Vector3d p_LQ_L_mesh;
+    size_t triangle_idx;
+    double distance;
+    p_LQ_L += normal_L * 2 * epsilon;
+    p_query.FindClosestPoint(p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx,
+                             &distance);
+    cout << "p_LQ_L: " << p_LQ_L.transpose() << endl;
+    cout << "p_LQ_L_mesh: " << p_LQ_L_mesh.transpose() << endl;
+    cout << "new_normal_L: " << normal_L.transpose() << endl;
+    cout << "tirnagle_idx: " << triangle_idx << endl;
+    cout << "distance: " << distance << endl << endl;
+
+    p_LQ_L = p_LQ_L_mesh;
+
+    iter_count++;
+  }
+  cout << "Final position: " << p_LQ_L.transpose() << endl;
+
+  return 0;
+}

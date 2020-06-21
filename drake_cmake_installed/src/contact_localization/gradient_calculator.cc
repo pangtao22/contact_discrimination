@@ -51,20 +51,21 @@ Eigen::MatrixXd CalcFrictionConeRays(
   return vC;
 }
 
-GradientCalculator::GradientCalculator(const std::string& robot_sdf_path)
-    : num_rays_{2},
+GradientCalculator::GradientCalculator(
+    const std::string& robot_sdf_path, const std::string& model_name,
+    const std::vector<std::string>& link_names, size_t num_rays)
+    : num_rays_{num_rays},
       qp_solver_(std::make_unique<OsqpWrapper>(num_rays_)),
       plant_(std::make_unique<MultibodyPlant<double>>(1e-3)) {
   drake::multibody::Parser parser(plant_.get());
   parser.AddModelFromFile(robot_sdf_path);
-  plant_->WeldFrames(plant_->world_frame(), plant_->GetFrameByName("link_0"));
+  plant_->WeldFrames(plant_->world_frame(),
+                     plant_->GetFrameByName(link_names[0]));
   plant_->mutable_gravity_field().set_gravity_vector({0, 0, 0});
   plant_->Finalize();
 
   plant_ad_ = drake::systems::System<double>::ToAutoDiffXd(*plant_);
-  robot_model_ = plant_->GetModelInstanceByName("three_link_arm");
-  std::vector<std::string> link_names{"link_0", "link_1", "link_2", "link_3",
-                                      "link_ee"};
+  robot_model_ = plant_->GetModelInstanceByName(model_name);
   for (const auto& name : link_names) {
     frame_indices_.emplace_back(plant_->GetFrameByName(name).index());
   }
@@ -78,33 +79,27 @@ GradientCalculator::GradientCalculator(const std::string& robot_sdf_path)
 
 void GradientCalculator::CalcFrictionConeRaysWorld(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link,
-    const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L) const {
+    const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L,
+    const Eigen::Ref<const Eigen::Vector3d>& normal_L) const {
   const auto& contact_frame_idx = frame_indices_[contact_link];
   plant_->SetPositions(plant_context_.get(), q);
   X_WL_ = plant_->CalcRelativeTransform(*plant_context_, plant_->world_frame(),
                                         plant_->get_frame(contact_frame_idx));
-  auto normal = CalcInwardNormal(contact_link, p_LoQ_L);
-  vC_W_ = X_WL_.rotation() * CalcFrictionConeRays(normal, 1, num_rays_);
+  vC_W_ = X_WL_.rotation() * CalcFrictionConeRays(normal_L, 1, num_rays_);
 }
 
-Eigen::Vector3d GradientCalculator::CalcInwardNormal(
-    size_t, const Eigen::Ref<const Eigen::Vector3d>&) const {
-  return Vector3d(0, 0, 1);
-}
 
-void GradientCalculator::CalcDlDy(
+void GradientCalculator::CalcDlDp(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+    const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
     drake::EigenPtr<Eigen::Vector3d> dldy_ptr, double* f_star_ptr) const {
-  CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L);
+  CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L, normal_L);
 
   const auto& contact_frame_idx = frame_indices_[contact_link_idx];
 
   auto p_LQ_L_ad = initializeAutoDiff(p_LQ_L);
-  p_LQ_L_ad[0].derivatives() << 0, 0, 0;
-  p_LQ_L_ad[1].derivatives() << 0, 1, 0;
-  p_LQ_L_ad[2].derivatives() << 0, 0, 0;
 
   plant_ad_->SetPositions(plant_context_ad_.get(), q);
   plant_ad_->CalcJacobianSpatialVelocity(
@@ -122,6 +117,15 @@ void GradientCalculator::CalcDlDy(
   MatrixXd dldQ(num_rays_, num_rays_);
   auto Q = DiscardGradient(Q_ad);
   auto b = DiscardGradient(b_ad);
+
+//  cout << "q\n" << q << endl;
+//  cout << "vC_W\n" << vC_W_ << endl;
+//  cout << "Jc_ad\n" << Jc_ad_ << endl;
+//  cout << "J_ad\n" << J_ad << endl;
+//  cout << "J_ad_derivatives\n" << J_ad(0, 0).derivatives() << endl;
+//  cout << "Q\n" << Q << endl;
+//  cout << "b\n" << b << endl;
+
   *f_star_ptr = qp_solver_->SolveGradient(Q, b, &x_star, &dldQ, &dldb) +
                 0.5 * tau_ext.squaredNorm();
 
@@ -129,17 +133,11 @@ void GradientCalculator::CalcDlDy(
   auto dbdy = autoDiffToGradientMatrix(b_ad);
 
   Eigen::Map<ArrayXd> dldQ_v(dldQ.data(), dldQ.size());
-
-  //  cout << "q\n" << q << endl;
-  //  cout << "vC_W\n" << vC_W_ << endl;
-  //  cout << "Jc_ad\n" << Jc_ad_ << endl;
-  //  cout << "J_ad\n" << J_ad << endl;
-  //  cout << "J_ad_derivatives\n" << J_ad(0, 0).derivatives() << endl;
-  //  cout << "dldQ_v\n" << dldQ_v << endl;
-  //  cout << "dldQ\n" << dldQ << endl;
-  //  cout << "dQdy\n" << dQdy << endl;
-  //  cout << "dldb\n" << dldb << endl;
-  //  cout << "dbdy\n" << dbdy << endl;
+//    cout << "dldQ_v\n" << dldQ_v << endl;
+//    cout << "dldQ\n" << dldQ << endl;
+//    cout << "dQdy\n" << dQdy << endl;
+//    cout << "dldb\n" << dldb << endl;
+//    cout << "dbdy\n" << dbdy << endl;
 
   //  cout << Q_ad(0, 0).derivatives() << endl;
   //  cout << Q_ad(0, 1).derivatives() << endl;
@@ -159,8 +157,9 @@ void GradientCalculator::CalcDlDy(
 double GradientCalculator::CalcContactQp(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+    const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const {
-  CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L);
+  CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L, normal_L);
 
   const auto& contact_frame_idx = frame_indices_[contact_link_idx];
 

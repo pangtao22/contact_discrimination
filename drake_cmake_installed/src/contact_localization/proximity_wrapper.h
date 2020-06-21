@@ -9,7 +9,7 @@
 class ProximityWrapper {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ProximityWrapper)
-  explicit ProximityWrapper(const std::string& mesh_file);
+  explicit ProximityWrapper(const std::string& mesh_file, double epsilon);
   /**
    * p_L: point coordinate in mesh frame (L).
    * p_mesh_L: point on mesh cloest to p_L, expressed in mesh frame L.

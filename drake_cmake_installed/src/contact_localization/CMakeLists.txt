@@ -17,8 +17,12 @@ target_link_libraries(load_mesh mesh lcm::lcm drake::drake osqp::osqp)
 add_executable(try_osqp try_osqp.cc)
 target_link_libraries(try_osqp osqp_wrapper)
 
-add_executable(try_gradient_calculator try_gradient_calculator.cc)
-target_link_libraries(try_gradient_calculator gradient_calculator)
+add_executable(try_gradient_decent_on_3link_arm try_gradient_decent_on_3link_arm.cc)
+target_link_libraries(try_gradient_decent_on_3link_arm gradient_calculator yaml-cpp)
 
 add_executable(try_proximity_wrapper try_proximity_wrapper.cc)
 target_link_libraries(try_proximity_wrapper proximity_wrapper)
+
+add_executable(try_gradient_descent_on_iiwa_link6 try_gradient_descent_on_iiwa_link6.cc)
+target_link_libraries(try_gradient_descent_on_iiwa_link6
+        gradient_calculator proximity_wrapper yaml-cpp)

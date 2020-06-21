@@ -65,6 +65,7 @@ find_package(OpenGL REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(osqp REQUIRED)
 find_package(lcm REQUIRED)
+find_package(yaml-cpp REQUIRED)
 find_library(ASSIMP_LIBRARY NAMES assimp PATHS
         /usr/lib64
         /usr/lib

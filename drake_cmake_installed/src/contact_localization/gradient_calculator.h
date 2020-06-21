@@ -20,21 +20,25 @@ Eigen::MatrixXd CalcFrictionConeRays(
 class GradientCalculator {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GradientCalculator);
-  explicit GradientCalculator(const std::string& robot_sdf_path);
-  void CalcFrictionConeRaysWorld(const Eigen::Ref<const Eigen::VectorXd>& q,
-      size_t contact_link, const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L)
-      const;
-  Eigen::Vector3d CalcInwardNormal(size_t contact_link_idx,
-      const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L) const;
-  void CalcDlDy(const Eigen::Ref<const Eigen::VectorXd>& q,
-                    size_t contact_link_idx,
-                    const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
-                    const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-                    drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
-                    double* f_star_ptr) const;
+  GradientCalculator(const std::string& robot_sdf_path,
+                     const std::string& model_name,
+                     const std::vector<std::string>& link_names,
+                     size_t num_rays);
+  void CalcFrictionConeRaysWorld(
+      const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link,
+      const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L,
+      const Eigen::Ref<const Eigen::Vector3d>& normal_L) const;
+  void CalcDlDp(const Eigen::Ref<const Eigen::VectorXd>& q,
+                size_t contact_link_idx,
+                const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+                const Eigen::Ref<const Eigen::Vector3d>& normal_L,
+                const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+                drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
+                double* f_star_ptr) const;
   double CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
                        size_t contact_link_idx,
                        const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+                       const Eigen::Ref<const Eigen::Vector3d>& normal_L,
                        const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const;
 
  private:
@@ -48,7 +52,7 @@ class GradientCalculator {
   std::vector<drake::multibody::FrameIndex> frame_indices_;
   mutable std::unique_ptr<drake::systems::Context<double>> plant_context_;
   mutable std::unique_ptr<drake::systems::Context<drake::AutoDiffXd>>
-    plant_context_ad_;
+      plant_context_ad_;
   mutable drake::MatrixX<drake::AutoDiffXd> Jc_ad_;
   mutable Eigen::MatrixXd Jc_;
   mutable drake::math::RigidTransformd X_WL_;

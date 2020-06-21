@@ -9,9 +9,9 @@ int main() {
       "/Users/pangtao/PycharmProjects/contact_aware_control"
       "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
 
-  ProximityWrapper proximity_wrapper(pFile);
-  std::vector<Vector3d> p_positions = {Vector3d(0, 0, 0.2),
-                                       Vector3d(0.2, -0.01, 0.01),
+  ProximityWrapper proximity_wrapper(pFile, 1e-3);
+  std::vector<Vector3d> p_positions = {Vector3d(0.01, 0.01, 0.2),
+                                       Vector3d(0, -0.2, -0.01),
                                        Vector3d(-0.2, -0.01, 0.01)};
 
   Vector3d p_mesh_L;

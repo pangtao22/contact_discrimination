@@ -43,8 +43,8 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
 
   // Populate matrices.
   size_t idx = 0;
-  for (size_t i = 0; i < num_vars_; i++) {
-    for (size_t j = i; j < num_vars_; j++) {
+  for (size_t j = 0; j < num_vars_; j++) {
+    for (size_t i = 0; i <= j; i++) {
       P_i_[idx] = i;
       idx++;
     }
@@ -63,14 +63,14 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
     u_[i] = std::numeric_limits<c_float>::infinity();
   }
   A_p_[num_vars_] = num_vars_;
-
-  //    PrintArray(P_i_, P_nnz_, "P_i");
-  //    PrintArray(P_p_, num_vars_ + 1, "P_p");
-  //    PrintArray(A_x_, num_vars_, "A_x");
-  //    PrintArray(A_i_, num_vars_, "A_i");
-  //    PrintArray(A_p_, num_vars_ + 1, "A_p_");
-  //    PrintArray(l_, num_vars_, "l");
-  //    PrintArray(u_, num_vars_, "u");
+//
+//      PrintArray(P_i_, P_nnz_, "P_i");
+//      PrintArray(P_p_, num_vars_ + 1, "P_p");
+//      PrintArray(A_x_, num_vars_, "A_x");
+//      PrintArray(A_i_, num_vars_, "A_i");
+//      PrintArray(A_p_, num_vars_ + 1, "A_p_");
+//      PrintArray(l_, num_vars_, "l");
+//      PrintArray(u_, num_vars_, "u");
 
   // Populate data.
   if (data_) {
@@ -99,8 +99,8 @@ double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
                           drake::EigenPtr<Eigen::VectorXd> x_star) const {
   // Update data.
   size_t idx = 0;
-  for (size_t i = 0; i < num_vars_; i++) {
-    for (size_t j = i; j < num_vars_; j++) {
+  for (size_t j = 0; j < num_vars_; j++) {
+    for (size_t i = 0; i <= j; i++)  {
       P_x_new_[idx] = Q(i, j);
       idx++;
     }
@@ -121,7 +121,7 @@ double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
   // Extract solution.
   assert(work_->info->status_val == 1);
   *x_star = Map<VectorXd>(work_->solution->x, work_->data->n);
-
+//  cout << "x_star: " << *x_star << endl;
   return work_->info->obj_val;
 }
 
