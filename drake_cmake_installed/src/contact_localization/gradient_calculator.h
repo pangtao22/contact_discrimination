@@ -34,12 +34,14 @@ class GradientCalculator {
                 const Eigen::Ref<const Eigen::Vector3d>& normal_L,
                 const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
                 drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
-                double* f_star_ptr) const;
-  double CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
-                       size_t contact_link_idx,
-                       const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
-                       const Eigen::Ref<const Eigen::Vector3d>& normal_L,
-                       const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const;
+                double* l_star_ptr) const;
+  void CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
+                     size_t contact_link_idx,
+                     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+                     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
+                     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+                     drake::EigenPtr<Eigen::Vector3d> f_W,
+                     double* l_star) const;
 
  private:
   const size_t num_rays_{};

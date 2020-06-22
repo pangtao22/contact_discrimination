@@ -154,11 +154,12 @@ void GradientCalculator::CalcDlDp(
   *dldy_ptr = dldy;
 }
 
-double GradientCalculator::CalcContactQp(
+void GradientCalculator::CalcContactQp(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
-    const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const {
+    const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+    drake::EigenPtr<Eigen::Vector3d> f_W, double* l_star) const {
   CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L, normal_L);
 
   const auto& contact_frame_idx = frame_indices_[contact_link_idx];
@@ -175,5 +176,6 @@ double GradientCalculator::CalcContactQp(
   VectorXd b = -J * tau_ext;       // Calcb
 
   VectorXd x_star(num_rays_);
-  return qp_solver_->Solve(Q, b, &x_star) + 0.5 * tau_ext.squaredNorm();
+  *l_star = qp_solver_->Solve(Q, b, &x_star) + 0.5 * tau_ext.squaredNorm();
+  *f_W = vC_W_ * x_star;
 }

@@ -1,3 +1,6 @@
+#include <fstream>
+#include <iostream>
+
 #include <drake/common/find_resource.h>
 #include <yaml-cpp/yaml.h>
 
@@ -40,22 +43,27 @@ int main() {
       0.14975149, 0.;
 
   // point on z axis
-    Vector3d p_LQ_L(0.0054828, -0.00315267, 0.0649383);
-    Vector3d normal_L(0.0329616, 0.114744, 0.992848);
+  Vector3d p_LQ_L(0.0054828, -0.00315267, 0.0649383);
+  Vector3d normal_L(0.0329616, 0.114744, 0.992848);
 
   // point on y axis
-//  Vector3d p_LQ_L(-3e-06, -0.08533, 0.011023);
-//  Vector3d normal_L(0.0336766, -0.986436, -0.160653);
+  //  Vector3d p_LQ_L(-3e-06, -0.08533, 0.011023);
+  //  Vector3d normal_L(0.0336766, -0.986436, -0.160653);
 
   Vector3d dldp;
-  double fy;
+  double l_star;
   Vector3d dlduv;
+  Vector3d f_W;
 
   size_t iter_count{0};
+
+  std::vector<Vector3d> log_normals_L = {normal_L};
+  std::vector<Vector3d> log_points_L = {p_LQ_L};
+
   while (iter_count < 20) {
     auto start = std::chrono::high_resolution_clock::now();
     calculator.CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext, &dldp,
-                        &fy);
+                        &l_star);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = duration_cast<std::chrono::microseconds>(end - start);
 
@@ -64,7 +72,7 @@ int main() {
     cout << "normal: " << normal_L.transpose() << endl;
     cout << "dldp: " << dldp.transpose() << endl;
     cout << "dlduv: " << dlduv.transpose() << endl;
-    cout << "fy: " << fy << endl;
+    cout << "l_star: " << l_star << endl;
     cout << "Gradient time: " << duration.count() << endl;
     if (dlduv.norm() < 1e-3) {
       break;
@@ -76,9 +84,14 @@ int main() {
     double beta = 0.9;
     double t = std::min(0.02 / dlduv.norm(), 1.);
     size_t line_search_steps = 0;
-    while (calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv,
-                                    -normal_L, tau_ext) >
-           fy - alpha * t * dlduv.squaredNorm()) {
+    double l_star_ls;  // line search
+
+    while (true) {
+      calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv, -normal_L,
+                               tau_ext, &f_W, &l_star_ls);
+      if(l_star_ls < l_star - alpha * t * dlduv.squaredNorm()) {
+        break;
+      }
       t *= beta;
       line_search_steps++;
     }
@@ -105,9 +118,32 @@ int main() {
 
     p_LQ_L = p_LQ_L_mesh;
 
+    log_normals_L.push_back(normal_L);
+    log_points_L.push_back(p_LQ_L);
+
     iter_count++;
   }
-  cout << "Final position: " << p_LQ_L.transpose() << endl;
+  cout << "\nFinal position: " << p_LQ_L.transpose() << endl;
+  cout << "f_W: " << f_W.transpose() << endl;
+  // Save logs to files
+  const std::string name = "gradient_descent_on_link_6";
+  std::ofstream file_points(name + "_points.csv");
+  std::ofstream file_normals(name + "_normals.csv");
+  const Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols,
+                                  ", ", "\n");
+
+  MatrixXd points(3, iter_count + 1);
+  MatrixXd normals(3, iter_count + 1);
+  for (size_t i = 0; i < iter_count + 1; i++) {
+    points.col(i) = log_points_L[i];
+    normals.col(i) = log_normals_L[i];
+  }
+
+  file_points << points.format(CSVFormat);
+  file_normals << normals.format(CSVFormat);
+
+  file_points.close();
+  file_normals.close();
 
   return 0;
 }

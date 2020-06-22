@@ -35,13 +35,14 @@ int main() {
   Vector3d dldy;
   dldy.setZero();
   Vector3d dldp;
-  double fy;
+  double l_star;
+  Vector3d f_W;
 
   size_t iter_count{0};
   while (true) {
     auto start = std::chrono::high_resolution_clock::now();
     calculator.CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext, &dldp,
-        &fy);
+        &l_star);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = duration_cast<std::chrono::microseconds>(end - start);
 
@@ -49,7 +50,7 @@ int main() {
     cout << "Iteration: " << iter_count << endl;
     cout << "dldy: " << dldy.transpose() << endl;
     cout << "dldp: " << dldp.transpose() << endl;
-    cout << "fy: " << fy << endl;
+    cout << "l_star: " << l_star << endl;
     cout << "Gradient time: " << duration.count() << endl;
     if (dldy.norm() < 1e-4) {
       break;
@@ -61,9 +62,14 @@ int main() {
     double beta = 0.9;
     double t = 1;
     size_t line_search_steps = 0;
-    while (calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dldy,
-                                     -normal_L, tau_ext) >
-           fy - alpha * t * dldy.squaredNorm()) {
+    double l_star_ls;
+
+    while (true) {
+      calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dldy,
+          -normal_L, tau_ext, &f_W, &l_star_ls);
+      if(l_star_ls < l_star - alpha * t * dldy.squaredNorm()) {
+        break;
+      }
       t *= beta;
       line_search_steps++;
     }
