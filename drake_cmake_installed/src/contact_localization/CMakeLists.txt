@@ -11,7 +11,7 @@ target_link_libraries(proximity_wrapper mesh drake::drake)
 add_library(gradient_calculator gradient_calculator.h gradient_calculator.cc)
 target_link_libraries(gradient_calculator mesh osqp_wrapper drake::drake )
 
-add_executable(load_mesh load_mesh.cc)
+add_executable(load_mesh try_loading_mesh.cc)
 target_link_libraries(load_mesh mesh lcm::lcm drake::drake osqp::osqp)
 
 add_executable(try_osqp try_osqp.cc)
