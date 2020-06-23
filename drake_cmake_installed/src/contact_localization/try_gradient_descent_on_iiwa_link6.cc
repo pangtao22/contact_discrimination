@@ -54,13 +54,12 @@ int main() {
   double l_star;
   Vector3d dlduv;
   Vector3d f_W;
-
   size_t iter_count{0};
 
   std::vector<Vector3d> log_normals_L = {normal_L};
   std::vector<Vector3d> log_points_L = {p_LQ_L};
 
-  while (iter_count < 20) {
+  while (iter_count < 30) {
     auto start = std::chrono::high_resolution_clock::now();
     calculator.CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext, &dldp,
                         &l_star);
@@ -81,7 +80,7 @@ int main() {
     start = std::chrono::high_resolution_clock::now();
     // Line search
     double alpha = 0.4;
-    double beta = 0.9;
+    double beta = 0.5;
     double t = std::min(0.02 / dlduv.norm(), 1.);
     size_t line_search_steps = 0;
     double l_star_ls;  // line search

@@ -9,7 +9,10 @@ add_library(proximity_wrapper proximity_wrapper.h proximity_wrapper.cc)
 target_link_libraries(proximity_wrapper mesh drake::drake)
 
 add_library(gradient_calculator gradient_calculator.h gradient_calculator.cc)
-target_link_libraries(gradient_calculator mesh osqp_wrapper drake::drake )
+target_link_libraries(gradient_calculator mesh osqp_wrapper drake::drake)
+
+add_library(local_minimum_sampler local_minimum_sampler.h local_minimum_sampler.cc)
+target_link_libraries(local_minimum_sampler gradient_calculator proximity_wrapper)
 
 add_executable(load_mesh try_loading_mesh.cc)
 target_link_libraries(load_mesh mesh lcm::lcm drake::drake osqp::osqp)
@@ -29,3 +32,6 @@ target_link_libraries(try_gradient_descent_on_iiwa_link6
 
 add_executable(try_sampling_mesh try_sampling_mesh.cc)
 target_link_libraries(try_sampling_mesh mesh)
+
+add_executable(try_sampling_local_minimum try_sampling_local_minimum.cc)
+target_link_libraries(try_sampling_local_minimum local_minimum_sampler yaml-cpp)

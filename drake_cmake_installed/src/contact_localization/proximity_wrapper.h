@@ -17,12 +17,13 @@ class ProximityWrapper {
    * triangle_idx: index of triangle into mesh_.triangle to which p_mesh_L
    *    belongs.
    * distance: distance between p_L and p_mesh_L.
-  */
+   */
   void FindClosestPoint(const Eigen::Ref<const Eigen::Vector3d>& p_L,
                         drake::EigenPtr<Eigen::Vector3d> p_mesh_L,
                         drake::EigenPtr<Eigen::Vector3d> normal_L,
-                        size_t* triangle_idx,
-                        double* distance) const;
+                        size_t* triangle_idx, double* distance) const;
+
+  const TriangleMesh& get_mesh() { return *mesh_; }
 
  private:
   const double epsilon_{};

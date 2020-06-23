@@ -53,17 +53,18 @@ TriangleMesh::TriangleMesh(const std::string& file_name) {
     areas_cdf_[i] = areas_cdf_[i - 1] + areas_int[i];
   }
 
+  // Initialize random number generators.
   std::random_device rd;
   generator_ = std::make_unique<std::mt19937>(rd());
   generator64_ = std::make_unique<std::mt19937_64>(rd());
-  distributaion_idx_ = std::make_unique<std::uniform_int_distribution<size_t>>(
+  distribution_idx_ = std::make_unique<std::uniform_int_distribution<size_t>>(
       0, areas_cdf_.back() - 1);
-  distributaion_uv_ = std::make_unique<std::uniform_real_distribution<>>(0, 1);
+  distribution_uv_ = std::make_unique<std::uniform_real_distribution<>>(0, 1);
 
-  cout << min_area << endl;
-  cout << areas.minCoeff() << " " << areas.maxCoeff() << endl;
-  cout << areas_int.minCoeff() << " " << areas_int.maxCoeff() << endl;
-  cout << areas_cdf_[0] << " " << areas_cdf_.back() << endl;
+//  cout << min_area << endl;
+//  cout << areas.minCoeff() << " " << areas.maxCoeff() << endl;
+//  cout << areas_int.minCoeff() << " " << areas_int.maxCoeff() << endl;
+//  cout << areas_cdf_[0] << " " << areas_cdf_.back() << endl;
   //  cout << distribution(generator) << endl;
 }
 
@@ -112,20 +113,30 @@ Eigen::Vector3d TriangleMesh::CalcPointNormal(
 }
 
 Eigen::Vector3d TriangleMesh::SamplePointOnMesh() const {
-  const size_t random_number = (*distributaion_idx_)(*generator64_);
-  size_t triangle_idx =
+  Vector3d point;
+  size_t triangle_idx;
+  SamplePointOnMesh(&point, &triangle_idx);
+  return point;
+}
+
+void TriangleMesh::SamplePointOnMesh(Eigen::Vector3d* point_ptr,
+                                     size_t* triangle_idx_ptr) const {
+  size_t& triangle_idx = *triangle_idx_ptr;
+
+  const size_t random_number = (*distribution_idx_)(*generator64_);
+  triangle_idx =
       std::upper_bound(areas_cdf_.begin(), areas_cdf_.end(), random_number) -
       areas_cdf_.begin();
   //  cout << triangle_idx << endl;
 
-  auto u = (*distributaion_uv_)(*generator_);
-  auto v = (*distributaion_uv_)(*generator_);
+  auto u = (*distribution_uv_)(*generator_);
+  auto v = (*distribution_uv_)(*generator_);
   if (u + v > 1) {
     u = 1 - u;
     v = 1 - v;
   }
 
-  return u * vertices_[triangles_[triangle_idx][0]] +
-         v * vertices_[triangles_[triangle_idx][1]] +
-         (1 - u - v) * vertices_[triangles_[triangle_idx][2]];
+  *point_ptr = u * vertices_[triangles_[triangle_idx][0]] +
+               v * vertices_[triangles_[triangle_idx][1]] +
+               (1 - u - v) * vertices_[triangles_[triangle_idx][2]];
 }
