@@ -38,6 +38,8 @@ void LocalMinimumSampler::SampleLocalMinimum(
   Vector3d f_W;
   size_t iter_count{0};
 
+  const size_t line_search_steps_limit = 50;
+
   if (log_points_L && log_normals_L) {
     log_points_L->clear();
     log_normals_L->clear();
@@ -72,8 +74,14 @@ void LocalMinimumSampler::SampleLocalMinimum(
       }
       t *= beta;
       line_search_steps++;
+      if(line_search_steps > line_search_steps_limit) {
+        break;
+      }
     }
     p_LQ_L += -t * dlduv;
+    if(line_search_steps > line_search_steps_limit) {
+      break;
+    }
 
     // Project p_LQ_L back to mesh
     Vector3d p_LQ_L_mesh;
