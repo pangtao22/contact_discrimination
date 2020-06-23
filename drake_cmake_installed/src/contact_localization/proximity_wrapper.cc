@@ -5,7 +5,7 @@ typedef fcl::BVHModel<fcl::OBBRSSd> Model;
 ProximityWrapper::ProximityWrapper(const std::string& mesh_file,
                                     double epsilon)
     : epsilon_(epsilon) {
-  mesh_ = std::make_unique<Mesh>(mesh_file);
+  mesh_ = std::make_unique<TriangleMesh>(mesh_file);
   auto geometry_mesh = std::make_shared<Model>();
   geometry_mesh->beginModel();
   geometry_mesh->addSubModel(mesh_->vertices_, mesh_->triangles_);

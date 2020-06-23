@@ -21,7 +21,7 @@ int main() {
       "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
   //  std::string pFile = "./cube.obj";
 
-  Mesh mesh(pFile);
+  TriangleMesh mesh(pFile);
 
   cout << "Mesh info" << endl;
   cout << mesh.vertices_.size() << " " << mesh.triangles_.size() << endl;

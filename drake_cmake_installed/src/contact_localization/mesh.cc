@@ -1,14 +1,18 @@
 #include "mesh.h"
 
+#include <numeric>
+
 #include <assimp/Importer.hpp>   // C++ importer interface
 #include <assimp/postprocess.h>  // Post processing flags
 #include <assimp/scene.h>        // Output data structure
 
 using Eigen::Vector3d;
+using Eigen::VectorXd;
+using std::cout;
+using std::endl;
 
-Mesh::Mesh(const std::string& file_name) {
+TriangleMesh::TriangleMesh(const std::string& file_name) {
   Assimp::Importer importer;
-
   const aiScene* scene = importer.ReadFile(
       file_name, aiProcess_CalcTangentSpace | aiProcess_Triangulate |
                      aiProcess_JoinIdenticalVertices | aiProcess_SortByPType);
@@ -28,9 +32,51 @@ Mesh::Mesh(const std::string& file_name) {
     auto* t = mesh->mFaces + i;
     triangles_.emplace_back(t->mIndices[0], t->mIndices[1], t->mIndices[2]);
   }
+
+  // Construct data structure for sampling.
+  VectorXd areas(mesh->mNumFaces);
+  double min_area = std::numeric_limits<double>::infinity();
+  for (size_t i = 0; i < mesh->mNumFaces; i++) {
+    areas[i] = CalcFaceArea(i);
+    if (areas[i] > 0 && min_area > areas[i]) {
+      min_area = areas[i];
+    }
+  }
+  Eigen::Matrix<size_t, -1, 1> areas_int(mesh->mNumFaces);
+  for (size_t i = 0; i < mesh->mNumFaces; i++) {
+    areas_int[i] = areas[i] / min_area;
+  }
+
+  areas_cdf_.resize(areas_int.size());
+  areas_cdf_[0] = areas_int[0];
+  for (size_t i = 1; i < areas_cdf_.size(); i++) {
+    areas_cdf_[i] = areas_cdf_[i - 1] + areas_int[i];
+  }
+
+  std::random_device rd;
+  generator_ = std::make_unique<std::mt19937>(rd());
+  generator64_ = std::make_unique<std::mt19937_64>(rd());
+  distributaion_idx_ = std::make_unique<std::uniform_int_distribution<size_t>>(
+      0, areas_cdf_.back() - 1);
+  distributaion_uv_ = std::make_unique<std::uniform_real_distribution<>>(0, 1);
+
+  cout << min_area << endl;
+  cout << areas.minCoeff() << " " << areas.maxCoeff() << endl;
+  cout << areas_int.minCoeff() << " " << areas_int.maxCoeff() << endl;
+  cout << areas_cdf_[0] << " " << areas_cdf_.back() << endl;
+  //  cout << distribution(generator) << endl;
 }
 
-Eigen::Vector3d Mesh::CalcFaceNormal(size_t triangle_idx) const {
+double TriangleMesh::CalcFaceArea(size_t triangle_idx) const {
+  const Vector3d& a = vertices_[triangles_[triangle_idx][0]];
+  const Vector3d& b = vertices_[triangles_[triangle_idx][1]];
+  const Vector3d& c = vertices_[triangles_[triangle_idx][2]];
+  auto ab = b - a;
+  auto ac = c - a;
+  return ab.cross(ac).norm();
+}
+
+Eigen::Vector3d TriangleMesh::CalcFaceNormal(size_t triangle_idx) const {
   const Vector3d& a = vertices_[triangles_[triangle_idx][0]];
   const Vector3d& b = vertices_[triangles_[triangle_idx][1]];
   const Vector3d& c = vertices_[triangles_[triangle_idx][2]];
@@ -39,7 +85,7 @@ Eigen::Vector3d Mesh::CalcFaceNormal(size_t triangle_idx) const {
   return ab.cross(ac).normalized();
 }
 
-Eigen::Vector3d Mesh::CalcBarycentric(
+Eigen::Vector3d TriangleMesh::CalcBarycentric(
     size_t triangle_idx, const Eigen::Ref<const Eigen::Vector3d>& p) const {
   const Vector3d& a = vertices_[triangles_[triangle_idx][0]];
   const Vector3d& b = vertices_[triangles_[triangle_idx][1]];
@@ -52,15 +98,34 @@ Eigen::Vector3d Mesh::CalcBarycentric(
   auto apc = ap.cross(ac).norm();
   auto u = abp / abc;
   auto v = apc / abc;
-  assert( 1 - u - v >= 0);
+  assert(1 - u - v >= 0);
   return {1 - u - v, u, v};
 }
 
-Eigen::Vector3d Mesh::CalcPointNormal(
+Eigen::Vector3d TriangleMesh::CalcPointNormal(
     size_t triangle_idx, const Eigen::Ref<const Eigen::Vector3d>& p) const {
   const Vector3d& n0 = normals_[triangles_[triangle_idx][0]];
   const Vector3d& n1 = normals_[triangles_[triangle_idx][1]];
   const Vector3d& n2 = normals_[triangles_[triangle_idx][2]];
   auto barycentric = CalcBarycentric(triangle_idx, p);
   return n0 * barycentric[0] + n1 * barycentric[1] + n2 * barycentric[2];
+}
+
+Eigen::Vector3d TriangleMesh::SamplePointOnMesh() const {
+  const size_t random_number = (*distributaion_idx_)(*generator64_);
+  size_t triangle_idx =
+      std::upper_bound(areas_cdf_.begin(), areas_cdf_.end(), random_number) -
+      areas_cdf_.begin();
+  //  cout << triangle_idx << endl;
+
+  auto u = (*distributaion_uv_)(*generator_);
+  auto v = (*distributaion_uv_)(*generator_);
+  if (u + v > 1) {
+    u = 1 - u;
+    v = 1 - v;
+  }
+
+  return u * vertices_[triangles_[triangle_idx][0]] +
+         v * vertices_[triangles_[triangle_idx][1]] +
+         (1 - u - v) * vertices_[triangles_[triangle_idx][2]];
 }

@@ -26,3 +26,6 @@ target_link_libraries(try_proximity_wrapper proximity_wrapper)
 add_executable(try_gradient_descent_on_iiwa_link6 try_gradient_descent_on_iiwa_link6.cc)
 target_link_libraries(try_gradient_descent_on_iiwa_link6
         gradient_calculator proximity_wrapper yaml-cpp)
+
+add_executable(try_sampling_mesh try_sampling_mesh.cc)
+target_link_libraries(try_sampling_mesh mesh)

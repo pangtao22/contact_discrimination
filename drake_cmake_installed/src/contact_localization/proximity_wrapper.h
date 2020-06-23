@@ -26,7 +26,7 @@ class ProximityWrapper {
 
  private:
   const double epsilon_{};
-  std::unique_ptr<Mesh> mesh_;
+  std::unique_ptr<TriangleMesh> mesh_;
   std::unique_ptr<fcl::CollisionObjectd> obj_mesh_;
   std::unique_ptr<fcl::CollisionObjectd> obj_point_;
   fcl::DistanceRequestd request_;
