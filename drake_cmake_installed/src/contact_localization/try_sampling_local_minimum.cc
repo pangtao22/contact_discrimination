@@ -20,6 +20,10 @@ const char kLink6MeshPath[] =
     "/Users/pangtao/PycharmProjects/contact_aware_control"
     "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
 
+const char kLink5MeshPath[] =
+    "/Users/pangtao/PycharmProjects/contact_aware_control"
+    "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
+
 int main() {
   YAML::Node config = YAML::LoadFile(kIiwa7Config);
 
@@ -58,6 +62,8 @@ int main() {
       endl;
       l_star_final_log.push_back(l_star_final);
       p_LQ_L_final_log.push_back(p_LQ_L_final);
+    } else {
+      cout << i << ": " << "did not converge." << endl;
     }
   }
 
@@ -69,7 +75,7 @@ int main() {
     optimal_values[i] = l_star_final_log[i];
   }
 
-  const std::string name = "link_6_local_minima";
+  const std::string name = "link_local_minima";
   std::ofstream file_points(name + "_points.csv");
   std::ofstream file_values(name + "_values.csv");
   const Eigen::IOFormat CSVFormat(Eigen::StreamPrecision, Eigen::DontAlignCols,
