@@ -41,8 +41,14 @@ int main() {
   size_t iter_count{0};
   while (true) {
     auto start = std::chrono::high_resolution_clock::now();
-    calculator.CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext, &dldp,
-        &l_star);
+    calculator.CalcDlDp(q,
+                        contact_link_idx,
+                        p_LQ_L,
+                        -normal_L,
+                        tau_ext,
+                        &dldp,
+                        &f_W,
+                        &l_star);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = duration_cast<std::chrono::microseconds>(end - start);
 

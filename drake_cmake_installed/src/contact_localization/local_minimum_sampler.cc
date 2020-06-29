@@ -12,48 +12,49 @@ LocalMinimumSampler::LocalMinimumSampler(
     : epsilon_(epsilon) {
   calculator_ = std::make_unique<GradientCalculator>(robot_sdf_path, model_name,
                                                      link_names, num_rays);
-  p_query_ = std::make_unique<ProximityWrapper>(link_mesh_path, epsilon);
+  p_query_ = std::make_unique<ProximityWrapper>(link_mesh_path, epsilon_);
 }
 
-void LocalMinimumSampler::SampleLocalMinimum(
+void LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     const Eigen::Ref<const Eigen::VectorXd>& q,
-    const Eigen::Ref<const Eigen::VectorXd>& tau_ext, size_t contact_link_idx,
-    const size_t iteration_limit, drake::EigenPtr<Vector3d> p_LQ_L_final,
+    const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+    const size_t contact_link_idx,
+    const size_t iteration_limit,
+    const Eigen::Ref<const Eigen::VectorXd>& p_LQ_L_initial,
+    const Eigen::Ref<const Eigen::VectorXd>& normal_L_initial,
+    drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
-    double* l_star_final,
-    std::vector<Vector3d>* log_points_L,
-    std::vector<Vector3d>* log_normals_L) const {
-  // Sample a point on mesh and get its normal.
-  Vector3d p_LQ_L;
-  Vector3d normal_L;
-  size_t triangle_idx;
-  p_query_->get_mesh().SamplePointOnMesh(&p_LQ_L, &triangle_idx);
-  normal_L = p_query_->get_mesh().CalcFaceNormal(triangle_idx);
+    double* l_star_final, bool is_logging) const {
 
   // Initialize quantities needed for gradient descent.
   Vector3d dldp;
   double l_star;
   Vector3d dlduv = Vector3d::Constant(std::numeric_limits<double>::infinity());
   Vector3d f_W;
+  Vector3d p_LQ_L = p_LQ_L_initial;
+  Vector3d normal_L = normal_L_initial;
   size_t iter_count{0};
 
   const size_t line_search_steps_limit = 50;
 
-  if (log_points_L && log_normals_L) {
-    log_points_L->clear();
-    log_normals_L->clear();
-    log_points_L->push_back(p_LQ_L);
-    log_normals_L->push_back(normal_L);
-  }
+  log_points_L_.clear();
+  log_normals_L_.clear();
+  log_dlduv_norm_.clear();
+  log_l_star_.clear();
 
   while (iter_count < iteration_limit) {
     calculator_->CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext,
-                          &dldp, &l_star);
+                          &dldp, &f_W, &l_star);
     dlduv = dldp - normal_L * dldp.dot(normal_L);
 
-//    cout << iter_count << endl;
-//    cout << "dlduv: " << dlduv.transpose() << endl;
+    // Logging.
+    if (is_logging) {
+      log_points_L_.push_back(p_LQ_L);
+      log_normals_L_.push_back(normal_L);
+      log_dlduv_norm_.push_back(dlduv.norm());
+      log_l_star_.push_back(l_star);
+    }
 
     if (dlduv.norm() < 1e-3) {
       break;
@@ -92,12 +93,6 @@ void LocalMinimumSampler::SampleLocalMinimum(
                                &distance);
     p_LQ_L = p_LQ_L_mesh;
 
-    // Logging.
-    if (log_points_L && log_normals_L) {
-      log_points_L->push_back(p_LQ_L);
-      log_normals_L->push_back(normal_L);
-    }
-
     iter_count++;
   }
 
@@ -109,3 +104,26 @@ void LocalMinimumSampler::SampleLocalMinimum(
 //  cout << "dlduv: " << dlduv.transpose() << endl;
 
 }
+
+void LocalMinimumSampler::SampleLocalMinimum(
+    const Eigen::Ref<const Eigen::VectorXd>& q,
+    const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+    const size_t contact_link_idx,
+    const size_t iteration_limit, drake::EigenPtr<Vector3d> p_LQ_L_final,
+    drake::EigenPtr<Vector3d> normal_L_final,
+    drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
+    double* l_star_final, bool is_logging) const {
+  // Sample a point on mesh and get its normal.
+  Vector3d p_LQ_L;
+  Vector3d normal_L;
+  size_t triangle_idx;
+  p_query_->get_mesh().SamplePointOnMesh(&p_LQ_L, &triangle_idx);
+  normal_L = p_query_->get_mesh().CalcFaceNormal(triangle_idx);
+
+  RunGradientDescentFromPointOnMesh(q, tau_ext, contact_link_idx,
+      iteration_limit, p_LQ_L, normal_L, p_LQ_L_final, normal_L_final,
+      f_W_final, dlduv_norm_final, l_star_final, is_logging);
+}
+
+
+

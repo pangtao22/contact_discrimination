@@ -35,3 +35,12 @@ target_link_libraries(try_sampling_mesh mesh)
 
 add_executable(try_sampling_local_minimum try_sampling_local_minimum.cc)
 target_link_libraries(try_sampling_local_minimum local_minimum_sampler yaml-cpp)
+
+add_executable(try_autodiff try_autodiff.cc)
+target_link_libraries(try_autodiff drake::drake)
+
+# Python bindings
+find_package(pybind11 CONFIG REQUIRED)
+
+pybind11_add_module(py_local_minimum_sampler MODULE py_local_minimum_sampler.cc)
+target_link_libraries(py_local_minimum_sampler PUBLIC local_minimum_sampler pybind11::module)
