@@ -21,12 +21,14 @@ class OsqpWrapper {
   ~OsqpWrapper();
 
  private:
+  void UpdateQpParameters(const Eigen::Ref<Eigen::MatrixXd>& Q,
+                          const Eigen::Ref<Eigen::VectorXd>& b) const;
+
   const size_t num_vars_;
   OSQPWorkspace* work_{nullptr};
   OSQPSettings* settings_{nullptr};
   OSQPData* data_{nullptr};
 
-  c_float* P_x_{nullptr};
   const c_int P_nnz_{};
   c_int* P_i_{nullptr};
   c_int* P_p_{nullptr};
@@ -36,10 +38,9 @@ class OsqpWrapper {
   c_int* A_i_{nullptr};
   c_int* A_p_{nullptr};
 
-  c_float* q_{nullptr};
   c_float* l_{nullptr};
   c_float* u_{nullptr};
 
-  mutable std::vector<c_float> P_x_new_{};
-  mutable std::vector<c_float> q_new_{};
+  mutable std::vector<c_float> P_x_{};
+  mutable std::vector<c_float> q_{};
 };

@@ -26,7 +26,6 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   settings_ = static_cast<OSQPSettings*>(c_malloc(sizeof(OSQPSettings)));
   data_ = static_cast<OSQPData*>(c_malloc(sizeof(OSQPData)));
 
-  P_x_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * P_nnz_));
   P_i_ = static_cast<c_int*>(c_malloc(sizeof(c_float) * P_nnz_));
   P_p_ = static_cast<c_int*>(c_malloc(sizeof(c_float) * (num_vars_ + 1)));
 
@@ -34,12 +33,18 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   A_i_ = static_cast<c_int*>(c_malloc(sizeof(c_float) * A_nnz_));
   A_p_ = static_cast<c_int*>(c_malloc(sizeof(c_float) * (num_vars_ + 1)));
 
-  q_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * num_vars_));
   l_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * num_vars_));
   u_ = static_cast<c_float*>(c_malloc(sizeof(c_float) * num_vars_));
 
-  P_x_new_.resize(P_nnz_);
-  q_new_.resize(num_vars_);
+  P_x_.resize(P_nnz_);
+  q_.resize(num_vars_);
+
+  // Initialize P_x_ and q_ so that the problem is convex.
+  MatrixXd Q(num_vars_, num_vars_);
+  Q.setIdentity();
+  VectorXd b(num_vars_);
+  b.setZero();
+  UpdateQpParameters(Q, b);
 
   // Populate matrices.
   size_t idx = 0;
@@ -76,8 +81,8 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   if (data_) {
     data_->n = num_vars_;
     data_->m = num_vars_;
-    data_->P = csc_matrix(data_->n, data_->n, P_nnz_, P_x_, P_i_, P_p_);
-    data_->q = q_;
+    data_->P = csc_matrix(data_->n, data_->n, P_nnz_, P_x_.data(), P_i_, P_p_);
+    data_->q = q_.data();
     data_->A = csc_matrix(data_->m, data_->n, A_nnz_, A_x_, A_i_, A_p_);
     data_->l = l_;
     data_->u = u_;
@@ -94,26 +99,32 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   assert(osqp_setup(&work_, data_, settings_) == 0);
 }
 
-double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
-                          const Eigen::Ref<Eigen::VectorXd>& b,
-                          drake::EigenPtr<Eigen::VectorXd> x_star) const {
-  // Update data.
+void OsqpWrapper::UpdateQpParameters(const Eigen::Ref<Eigen::MatrixXd>& Q,
+                                     const Eigen::Ref<Eigen::VectorXd>& b)
+                                     const {
   size_t idx = 0;
   for (size_t j = 0; j < num_vars_; j++) {
     for (size_t i = 0; i <= j; i++)  {
-      P_x_new_[idx] = Q(i, j);
+      P_x_[idx] = Q(i, j);
       idx++;
     }
   }
 
   for (size_t i = 0; i < num_vars_; i++) {
-    q_new_[i] = b[i];
+    q_[i] = b[i];
   }
+}
+
+double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
+                          const Eigen::Ref<Eigen::VectorXd>& b,
+                          drake::EigenPtr<Eigen::VectorXd> x_star) const {
+  // Update data.
+  UpdateQpParameters(Q, b);
   //  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
   //  PrintArray(q_new_.data(), q_new_.size(), "q");
 
-  osqp_update_P(work_, P_x_new_.data(), OSQP_NULL, P_nnz_);
-  osqp_update_lin_cost(work_, q_new_.data());
+  osqp_update_P(work_, P_x_.data(), OSQP_NULL, P_nnz_);
+  osqp_update_lin_cost(work_, q_.data());
 
   // Solve Problem
   osqp_solve(work_);
@@ -191,7 +202,7 @@ double OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd>& Q,
 
 OsqpWrapper::~OsqpWrapper() {
   osqp_cleanup(work_);
-  c_free(data_->P->x);
+//  c_free(data_->P->x);
   c_free(data_->P->i);
   c_free(data_->P->p);
   c_free(data_->P);
@@ -199,7 +210,6 @@ OsqpWrapper::~OsqpWrapper() {
   c_free(data_->A->i);
   c_free(data_->A->p);
   c_free(data_->A);
-  c_free(q_);
   c_free(l_);
   c_free(u_);
   c_free(data_);
