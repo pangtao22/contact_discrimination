@@ -138,7 +138,7 @@ void GradientCalculator::UpdateA3DVariables(
   }
 }
 
-void GradientCalculator::CalcDlDp(
+bool GradientCalculator::CalcDlDp(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
@@ -171,8 +171,13 @@ void GradientCalculator::CalcDlDp(
   }
 
   VectorXd x_star(num_rays_);
-  *l_star_ptr = qp_solver_->SolveGradient(Q_, b_, &x_star, &dldQ_, &dldb_) +
-                0.5 * tau_ext.squaredNorm();
+  const bool is_qp_solved =
+      qp_solver_->SolveGradient(Q_, b_, &x_star, l_star_ptr, &dldQ_, &dldb_);
+  if (!is_qp_solved) {
+    return false;
+  }
+
+  *l_star_ptr += 0.5 * tau_ext.squaredNorm();
 
   Eigen::Map<ArrayXd> dldQ_v(dldQ_.data(), dldQ_.size());
   Vector3d dldy = Vector3d::Zero();
@@ -183,9 +188,11 @@ void GradientCalculator::CalcDlDp(
 
   *fW_ptr = vC_W_ * x_star;
   *dldy_ptr = dldy;
+
+  return true;
 }
 
-void GradientCalculator::CalcContactQp(
+bool GradientCalculator::CalcContactQp(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
@@ -201,11 +208,15 @@ void GradientCalculator::CalcContactQp(
       plant_->get_frame(contact_frame_idx), p_LQ_L, plant_->world_frame(),
       plant_->world_frame(), &J_);
 
-  MatrixXd J = vC_W_.transpose() * J_.bottomRows(3);   // CalcJ
-  MatrixXd Q = J * J.transpose();  // CalcQ
-  VectorXd b = -J * tau_ext;       // Calcb
+  MatrixXd J = vC_W_.transpose() * J_.bottomRows(3);  // CalcJ
+  MatrixXd Q = J * J.transpose();                     // CalcQ
+  VectorXd b = -J * tau_ext;                          // Calcb
 
   VectorXd x_star(num_rays_);
-  *l_star = qp_solver_->Solve(Q, b, &x_star) + 0.5 * tau_ext.squaredNorm();
-  *f_W = vC_W_ * x_star;
+  if (qp_solver_->Solve(Q, b, &x_star, l_star)) {
+    *f_W = vC_W_ * x_star;
+    *l_star += +0.5 * tau_ext.squaredNorm();
+    return true;
+  }
+  return false;
 }

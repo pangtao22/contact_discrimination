@@ -19,8 +19,11 @@ int main(int argc, char **argv) {
   VectorXd x_star(num_vars), dldb(num_vars);
   MatrixXd dldQ(num_vars, num_vars);
 
-  qp_solver.SolveGradient(P, b, &x_star, &dldQ, &dldb);
+  double l_star;
+  bool is_successful = qp_solver.SolveGradient(
+      P, b, &x_star, &l_star, &dldQ, &dldb);
   cout << "x_star\n" << x_star << endl;
+  cout << "is_successful? " << is_successful << endl;
   cout << "dldb\n" << dldb << endl;
   cout << "dldQ\n" << dldQ << endl;
 

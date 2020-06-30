@@ -11,7 +11,7 @@ class LocalMinimumSampler {
                       const std::vector<std::string>& link_names, int num_rays,
                       const std::string& link_mesh_path, double epsilon);
 
-  void RunGradientDescentFromPointOnMesh(
+  bool RunGradientDescentFromPointOnMesh(
       const Eigen::Ref<const Eigen::VectorXd>& q,
       const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
       const size_t contact_link_idx,
@@ -23,7 +23,7 @@ class LocalMinimumSampler {
       drake::EigenPtr<Eigen::Vector3d> f_W_final, double* dlduv_norm_final,
       double* l_star_final, bool is_logging) const;
 
-  void SampleLocalMinimum(const Eigen::Ref<const Eigen::VectorXd>& q,
+  bool SampleLocalMinimum(const Eigen::Ref<const Eigen::VectorXd>& q,
                           const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
                           const size_t contact_link_idx,
                           const size_t iteration_limit,
@@ -42,6 +42,7 @@ class LocalMinimumSampler {
 
  private:
   const double epsilon_;
+  const double gradient_norm_convergence_threshold_;
   std::unique_ptr<GradientCalculator> calculator_;
   std::unique_ptr<ProximityWrapper> p_query_;
 

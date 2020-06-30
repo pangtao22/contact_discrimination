@@ -22,7 +22,7 @@ const char kLink6MeshPath[] =
 
 const char kLink5MeshPath[] =
     "/Users/pangtao/PycharmProjects/contact_aware_control"
-    "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
+    "/contact_particle_filter/iiwa7_shifted_meshes/link_5.obj";
 
 int main() {
   YAML::Node config = YAML::LoadFile(kIiwa7Config);
@@ -31,39 +31,54 @@ int main() {
       drake::FindResourceOrThrow(kIiwaSdf),
       config["model_instance_name"].as<std::string>(),
       config["link_names"].as<std::vector<std::string>>(),
-      config["num_friction_cone_rays"].as<size_t>(), kLink6MeshPath, 5e-4);
+      config["num_friction_cone_rays"].as<size_t>(), kLink5MeshPath, 5e-4);
 
   const size_t nq = 7;
   VectorXd q(nq);
-  q << -0.47839296, -0.07140746, -1.62651793, 1.37309486, 0.22398543,
-      0.67425391, 2.79916161;
+  q << -0.72660612, -1.91476416, -0.88434094, 0.56057658, 0.09017497,
+      0.77990924, -2.50260755;
   VectorXd tau_ext(nq);
-  tau_ext << 2.19172843, -2.52495118, 2.1875039, -2.28800535, 0.19415752,
-      0.14975149, 0.;
-  const size_t contact_link_idx = 6;
+  tau_ext << 4.58945169, 2.29842181, 0.66350414, -1.72077332, 0.23138661, 0.,
+      0.;
+  const size_t contact_link_idx = 5;
 
-  const size_t iteration_limit = 30;
+  const size_t iteration_limit = 100;
   Vector3d p_LQ_L_final;
   Vector3d normal_L_final;
   Vector3d f_W_final;
   double dlduv_norm_final;
   double l_star_final;
 
+  //  Vector3d p_LQ_L_initial(-0.05276329, -0.04265036,  0.03206141);
+  //  Vector3d normal_L_initial(-0.76607425, -0.64275209,  0.        );
+  //
+  //  lm_sampler.RunGradientDescentFromPointOnMesh(q, tau_ext, contact_link_idx,
+  //      iteration_limit, p_LQ_L_initial, normal_L_initial,
+  //                                  &p_LQ_L_final, &normal_L_final,
+  //                                  &f_W_final, &dlduv_norm_final,
+  //                                  &l_star_final, false);
+  //  cout << l_star_final << " " << dlduv_norm_final << endl;
+  //  cout << "f_W_final: " << f_W_final.transpose() << endl;
+  //  cout << "p_LQ_L_final: " << p_LQ_L_final.transpose() << endl;
+  //  cout << "normal_L_final: " << normal_L_final.transpose() << endl;
+  //  cout << "dot: " << f_W_final.normalized().dot(-normal_L_final) << endl;
+
   std::vector<double> l_star_final_log;
   std::vector<Vector3d> p_LQ_L_final_log;
 
   for (int i = 0; i < 20; i++) {
-    lm_sampler.SampleLocalMinimum(q, tau_ext, contact_link_idx, iteration_limit,
-                                  &p_LQ_L_final, &normal_L_final, &f_W_final,
-                                  &dlduv_norm_final, &l_star_final, nullptr,
-                                  nullptr);
-    if (dlduv_norm_final < 1e-3) {
-      cout << i << ": " << l_star_final << " " << p_LQ_L_final.transpose() <<
-      endl;
+    dlduv_norm_final = 1e6;
+    bool is_successful = lm_sampler.SampleLocalMinimum(
+        q, tau_ext, contact_link_idx, iteration_limit, &p_LQ_L_final,
+        &normal_L_final, &f_W_final, &dlduv_norm_final, &l_star_final, false);
+    if (is_successful) {
+      cout << i << ": " << l_star_final << " " << dlduv_norm_final << " " <<
+          p_LQ_L_final.transpose() << endl;
       l_star_final_log.push_back(l_star_final);
       p_LQ_L_final_log.push_back(p_LQ_L_final);
     } else {
-      cout << i << ": " << "did not converge." << endl;
+      cout << i << ": "
+           << "did not converge." << endl;
     }
   }
 

@@ -9,24 +9,22 @@ LocalMinimumSampler::LocalMinimumSampler(
     const std::string& robot_sdf_path, const std::string& model_name,
     const std::vector<std::string>& link_names, int num_rays,
     const std::string& link_mesh_path, double epsilon)
-    : epsilon_(epsilon) {
+    : epsilon_(epsilon), gradient_norm_convergence_threshold_(1e-3) {
   calculator_ = std::make_unique<GradientCalculator>(robot_sdf_path, model_name,
                                                      link_names, num_rays);
   p_query_ = std::make_unique<ProximityWrapper>(link_mesh_path, epsilon_);
 }
 
-void LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
+bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     const Eigen::Ref<const Eigen::VectorXd>& q,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-    const size_t contact_link_idx,
-    const size_t iteration_limit,
+    const size_t contact_link_idx, const size_t iteration_limit,
     const Eigen::Ref<const Eigen::VectorXd>& p_LQ_L_initial,
     const Eigen::Ref<const Eigen::VectorXd>& normal_L_initial,
     drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
     double* l_star_final, bool is_logging) const {
-
   // Initialize quantities needed for gradient descent.
   Vector3d dldp;
   double l_star;
@@ -44,8 +42,10 @@ void LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
   log_l_star_.clear();
 
   while (iter_count < iteration_limit) {
-    calculator_->CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext,
-                          &dldp, &f_W, &l_star);
+    if (!calculator_->CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext,
+                               &dldp, &f_W, &l_star)) {
+      return false;
+    }
     dlduv = dldp - normal_L * dldp.dot(normal_L);
 
     // Logging.
@@ -56,7 +56,7 @@ void LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
       log_l_star_.push_back(l_star);
     }
 
-    if (dlduv.norm() < 1e-3) {
+    if (dlduv.norm() < gradient_norm_convergence_threshold_) {
       break;
     }
 
@@ -68,21 +68,20 @@ void LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     double l_star_ls;
 
     while (true) {
-      calculator_->CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv,
-                                 -normal_L, tau_ext, &f_W, &l_star_ls);
+      if (!calculator_->CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv,
+                                      -normal_L, tau_ext, &f_W, &l_star_ls)) {
+        return false;
+      }
       if (l_star_ls < l_star - alpha * t * dlduv.squaredNorm()) {
         break;
       }
       t *= beta;
       line_search_steps++;
-      if(line_search_steps > line_search_steps_limit) {
-        break;
+      if (line_search_steps > line_search_steps_limit) {
+        return false;
       }
     }
     p_LQ_L += -t * dlduv;
-    if(line_search_steps > line_search_steps_limit) {
-      break;
-    }
 
     // Project p_LQ_L back to mesh
     Vector3d p_LQ_L_mesh;
@@ -96,20 +95,22 @@ void LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     iter_count++;
   }
 
-  *p_LQ_L_final = p_LQ_L;
-  *normal_L_final = normal_L;
-  *f_W_final = f_W;
-  *dlduv_norm_final = dlduv.norm();
-  *l_star_final = l_star;
-//  cout << "dlduv: " << dlduv.transpose() << endl;
-
+  if (dlduv.norm() < gradient_norm_convergence_threshold_) {
+    *p_LQ_L_final = p_LQ_L;
+    *normal_L_final = normal_L;
+    *f_W_final = f_W;
+    *dlduv_norm_final = dlduv.norm();
+    *l_star_final = l_star;
+    return true;
+  }
+  return false;
 }
 
-void LocalMinimumSampler::SampleLocalMinimum(
+bool LocalMinimumSampler::SampleLocalMinimum(
     const Eigen::Ref<const Eigen::VectorXd>& q,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-    const size_t contact_link_idx,
-    const size_t iteration_limit, drake::EigenPtr<Vector3d> p_LQ_L_final,
+    const size_t contact_link_idx, const size_t iteration_limit,
+    drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
     double* l_star_final, bool is_logging) const {
@@ -120,10 +121,8 @@ void LocalMinimumSampler::SampleLocalMinimum(
   p_query_->get_mesh().SamplePointOnMesh(&p_LQ_L, &triangle_idx);
   normal_L = p_query_->get_mesh().CalcFaceNormal(triangle_idx);
 
-  RunGradientDescentFromPointOnMesh(q, tau_ext, contact_link_idx,
-      iteration_limit, p_LQ_L, normal_L, p_LQ_L_final, normal_L_final,
-      f_W_final, dlduv_norm_final, l_star_final, is_logging);
+  return RunGradientDescentFromPointOnMesh(q, tau_ext, contact_link_idx,
+                                    iteration_limit, p_LQ_L, normal_L,
+                                    p_LQ_L_final, normal_L_final, f_W_final,
+                                    dlduv_norm_final, l_star_final, is_logging);
 }
-
-
-

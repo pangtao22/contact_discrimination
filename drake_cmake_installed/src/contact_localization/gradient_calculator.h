@@ -30,7 +30,7 @@ class GradientCalculator {
       const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link,
       const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L,
       const Eigen::Ref<const Eigen::Vector3d>& normal_L) const;
-  void CalcDlDp(const Eigen::Ref<const Eigen::VectorXd> &q,
+  bool CalcDlDp(const Eigen::Ref<const Eigen::VectorXd> &q,
                 size_t contact_link_idx,
                 const Eigen::Ref<const Eigen::Vector3d> &p_LQ_L,
                 const Eigen::Ref<const Eigen::Vector3d> &normal_L,
@@ -38,7 +38,7 @@ class GradientCalculator {
                 drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
                 drake::EigenPtr<Eigen::Vector3d> fW_ptr,
                 double *l_star_ptr) const;
-  void CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
+  bool CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
                      size_t contact_link_idx,
                      const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
                      const Eigen::Ref<const Eigen::Vector3d>& normal_L,

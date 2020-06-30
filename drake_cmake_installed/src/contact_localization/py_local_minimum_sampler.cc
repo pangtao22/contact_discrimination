@@ -21,7 +21,7 @@ PYBIND11_MODULE(py_local_minimum_sampler, m) {
               Eigen::Ref<Eigen::Vector3d>& f_W_final) {
              double dlduv_norm_final;
              double l_star_final;
-             self->SampleLocalMinimum(q, tau_ext, contact_link_idx,
+             return self->SampleLocalMinimum(q, tau_ext, contact_link_idx,
                                       iteration_limit, &p_LQ_L_final,
                                       &normal_L_final, &f_W_final,
                                       &dlduv_norm_final, &l_star_final, true);
@@ -37,7 +37,7 @@ PYBIND11_MODULE(py_local_minimum_sampler, m) {
               Eigen::Ref<Eigen::Vector3d>& f_W_final) {
              double dlduv_norm_final;
              double l_star_final;
-             self->RunGradientDescentFromPointOnMesh(
+             return self->RunGradientDescentFromPointOnMesh(
                  q, tau_ext, contact_link_idx, iteration_limit, p_LQ_L_initial,
                  normal_L_initial, &p_LQ_L_final, &normal_L_final, &f_W_final,
                  &dlduv_norm_final, &l_star_final, true);

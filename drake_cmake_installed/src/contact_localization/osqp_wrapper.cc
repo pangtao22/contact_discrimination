@@ -115,9 +115,10 @@ void OsqpWrapper::UpdateQpParameters(const Eigen::Ref<Eigen::MatrixXd>& Q,
   }
 }
 
-double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
-                          const Eigen::Ref<Eigen::VectorXd>& b,
-                          drake::EigenPtr<Eigen::VectorXd> x_star) const {
+bool OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd> &Q,
+                        const Eigen::Ref<Eigen::VectorXd> &b,
+                        drake::EigenPtr<Eigen::VectorXd> x_star,
+                        double *l_star) const {
   // Update data.
   UpdateQpParameters(Q, b);
   //  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
@@ -130,15 +131,15 @@ double OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd>& Q,
   osqp_solve(work_);
 
   // Extract solution.
-  assert(work_->info->status_val == 1);
   *x_star = Map<VectorXd>(work_->solution->x, work_->data->n);
-//  cout << "x_star: " << *x_star << endl;
-  return work_->info->obj_val;
+  *l_star = work_->info->obj_val;
+  return work_->info->status_val == 1;
 }
 
-double OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd>& Q,
-                                const Eigen::Ref<Eigen::VectorXd>& b,
+bool OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd> &Q,
+                                const Eigen::Ref<Eigen::VectorXd> &b,
                                 drake::EigenPtr<Eigen::VectorXd> x_star,
+                                double *l_star,
                                 drake::EigenPtr<Eigen::MatrixXd> dlDQ,
                                 drake::EigenPtr<Eigen::VectorXd> dldb) const {
 
@@ -150,7 +151,9 @@ double OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd>& Q,
   //  PrintArray(work_->solution->y, num_vars_, "y");
 
   // Solve problem
-  Solve(Q, b, x_star);
+  if(!Solve(Q, b, x_star, l_star)) {
+    return false;
+  }
 
   const size_t nx = work_->data->n;
   const size_t n_lambda = work_->data->m;
@@ -196,8 +199,7 @@ double OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd>& Q,
   //  cout << "A\n" << A << endl;
   //  cout << "A11\n" << A11 << endl;
   //  cout << "a1\n" << a1 << endl;
-
-  return work_->info->obj_val;
+  return true;
 }
 
 OsqpWrapper::~OsqpWrapper() {
