@@ -53,6 +53,8 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
   log_dlduv_norm_.clear();
   log_l_star_.clear();
 
+  bool is_stuck = false;
+
   while (iter_count < iteration_limit) {
     if (!calculator_->CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext,
                                &dldp, &f_W, &l_star)) {
@@ -90,9 +92,14 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
       t *= beta;
       line_search_steps++;
       if (line_search_steps > line_search_steps_limit) {
-        return false;
+        is_stuck = true;
+        break;
       }
     }
+    if (is_stuck) {
+      break;
+    }
+
     p_LQ_L += -t * dlduv;
 
     // Project p_LQ_L back to mesh
@@ -107,7 +114,8 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     iter_count++;
   }
 
-  if (dlduv.norm() < gradient_norm_convergence_threshold_) {
+  if (dlduv.norm() < gradient_norm_convergence_threshold_ ||
+      sqrt(2 * l_star) < tau_ext.norm() * 1e-2) {
     *p_LQ_L_final = p_LQ_L;
     *normal_L_final = normal_L;
     *f_W_final = f_W;
