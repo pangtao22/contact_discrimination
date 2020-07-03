@@ -16,7 +16,9 @@ TriangleMesh::TriangleMesh(const std::string& file_name) {
   const aiScene* scene = importer.ReadFile(
       file_name, aiProcess_CalcTangentSpace | aiProcess_Triangulate |
                      aiProcess_JoinIdenticalVertices | aiProcess_SortByPType);
-
+  if(!scene) {
+    throw std::runtime_error(file_name + " does not exist.");
+  }
   assert(scene->mNumMeshes == 1);
   auto* mesh = scene->mMeshes[0];
   assert(mesh->mPrimitiveTypes == aiPrimitiveType_TRIANGLE);
