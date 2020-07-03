@@ -10,8 +10,8 @@ PYBIND11_MODULE(py_local_minimum_sampler, m) {
   using Class = LocalMinimumSampler;
 
   py::class_<Class>(m, "LocalMinimumSampler")
-      .def(py::init<std::string, std::string, std::vector<std::string>, int,
-                    std::string, double>())
+      .def(py::init<std::string, std::string, std::vector<std::string>,
+          std::vector<std::string>, std::vector<int>, int, double>())
       .def("SampleLocalMinimum",
            [](const Class* self, const Eigen::Ref<const Eigen::VectorXd>& q,
               const Eigen::Ref<const Eigen::VectorXd>& tau_ext,

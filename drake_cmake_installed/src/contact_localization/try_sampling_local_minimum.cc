@@ -16,22 +16,26 @@ const char kIiwa7Config[] =
     "/Users/pangtao/PycharmProjects/contact_aware_control"
     "/contact_discrimination/config_iiwa7.yml";
 
-const char kLink6MeshPath[] =
-    "/Users/pangtao/PycharmProjects/contact_aware_control"
-    "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
-
-const char kLink5MeshPath[] =
-    "/Users/pangtao/PycharmProjects/contact_aware_control"
-    "/contact_particle_filter/iiwa7_shifted_meshes/link_5.obj";
 
 int main() {
   YAML::Node config = YAML::LoadFile(kIiwa7Config);
+
+  std::vector<std::string> active_link_mesh_paths;
+  for(int i = 0; i < 7; i++) {
+    active_link_mesh_paths.emplace_back(
+        "/Users/pangtao/PycharmProjects/contact_aware_control"
+        "/contact_particle_filter/iiwa7_shifted_meshes/link_" +
+        std::to_string(i) + ".obj");
+  }
 
   LocalMinimumSampler lm_sampler(
       drake::FindResourceOrThrow(kIiwaSdf),
       config["model_instance_name"].as<std::string>(),
       config["link_names"].as<std::vector<std::string>>(),
-      config["num_friction_cone_rays"].as<size_t>(), kLink5MeshPath, 5e-4);
+      active_link_mesh_paths,
+      {5, 6},
+      config["num_friction_cone_rays"].as<size_t>(),
+      5e-4);
 
   const size_t nq = 7;
   VectorXd q(nq);
