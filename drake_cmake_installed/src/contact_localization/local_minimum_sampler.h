@@ -6,10 +6,13 @@
 class LocalMinimumSampler {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(LocalMinimumSampler)
-  LocalMinimumSampler(const std::string& robot_sdf_path,
-                      const std::string& model_name,
-                      const std::vector<std::string>& link_names, int num_rays,
-                      const std::string& link_mesh_path, double epsilon);
+  LocalMinimumSampler(const std::string &robot_sdf_path,
+                      const std::string &model_name,
+                      const std::vector<std::string> &link_names,
+                      const std::vector<std::string> &link_mesh_paths,
+                      const std::vector<int> &active_link_indices,
+                      int num_rays,
+                      double epsilon);
 
   bool RunGradientDescentFromPointOnMesh(
       const Eigen::Ref<const Eigen::VectorXd>& q,
@@ -44,7 +47,7 @@ class LocalMinimumSampler {
   const double epsilon_;
   const double gradient_norm_convergence_threshold_;
   std::unique_ptr<GradientCalculator> calculator_;
-  std::unique_ptr<ProximityWrapper> p_query_;
+  std::vector<std::unique_ptr<ProximityWrapper>> p_queries_;
 
   mutable std::vector<Eigen::Vector3d> log_points_L_;
   mutable std::vector<Eigen::Vector3d> log_normals_L_;

@@ -7,12 +7,24 @@ using std::endl;
 
 LocalMinimumSampler::LocalMinimumSampler(
     const std::string& robot_sdf_path, const std::string& model_name,
-    const std::vector<std::string>& link_names, int num_rays,
-    const std::string& link_mesh_path, double epsilon)
+    const std::vector<std::string>& link_names,
+    const std::vector<std::string>& link_mesh_paths,
+    const std::vector<int>& active_link_indices, int num_rays, double epsilon)
     : epsilon_(epsilon), gradient_norm_convergence_threshold_(1e-3) {
   calculator_ = std::make_unique<GradientCalculator>(robot_sdf_path, model_name,
                                                      link_names, num_rays);
-  p_query_ = std::make_unique<ProximityWrapper>(link_mesh_path, epsilon_);
+  const int num_links = *(std::max_element(active_link_indices.begin(),
+                                           active_link_indices.end())) +
+                        1;
+
+  for (int i = 0; i < num_links; i++) {
+    p_queries_.push_back(nullptr);
+  }
+
+  for (const auto& i : active_link_indices) {
+    p_queries_[i] =
+        std::make_unique<ProximityWrapper>(link_mesh_paths[i], epsilon_);
+  }
 }
 
 bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
@@ -88,8 +100,8 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     size_t triangle_idx;
     double distance;
     p_LQ_L += normal_L * 2 * epsilon_;
-    p_query_->FindClosestPoint(p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx,
-                               &distance);
+    p_queries_[contact_link_idx]->FindClosestPoint(
+        p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx, &distance);
     p_LQ_L = p_LQ_L_mesh;
 
     iter_count++;
@@ -118,11 +130,13 @@ bool LocalMinimumSampler::SampleLocalMinimum(
   Vector3d p_LQ_L;
   Vector3d normal_L;
   size_t triangle_idx;
-  p_query_->get_mesh().SamplePointOnMesh(&p_LQ_L, &triangle_idx);
-  normal_L = p_query_->get_mesh().CalcFaceNormal(triangle_idx);
+  p_queries_[contact_link_idx]->get_mesh().SamplePointOnMesh(&p_LQ_L,
+                                                             &triangle_idx);
+  normal_L =
+      p_queries_[contact_link_idx]->get_mesh().CalcFaceNormal(triangle_idx);
 
-  return RunGradientDescentFromPointOnMesh(q, tau_ext, contact_link_idx,
-                                    iteration_limit, p_LQ_L, normal_L,
-                                    p_LQ_L_final, normal_L_final, f_W_final,
-                                    dlduv_norm_final, l_star_final, is_logging);
+  return RunGradientDescentFromPointOnMesh(
+      q, tau_ext, contact_link_idx, iteration_limit, p_LQ_L, normal_L,
+      p_LQ_L_final, normal_L_final, f_W_final, dlduv_norm_final, l_star_final,
+      is_logging);
 }
