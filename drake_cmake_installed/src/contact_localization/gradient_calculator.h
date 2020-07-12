@@ -16,6 +16,9 @@ const char kPlanarArmSdf[] =
     "/Users/pangtao/PycharmProjects/contact_aware_control/plan_runner/models/"
     "three_link_arm.sdf";
 
+constexpr size_t kNumPositions = 7;
+constexpr size_t kNumRays = 4;
+
 Eigen::MatrixXd CalcFrictionConeRays(
     const Eigen::Ref<const Eigen::Vector3d>& normal, double mu, size_t nd);
 
@@ -46,10 +49,8 @@ class GradientCalculator {
                      drake::EigenPtr<Eigen::Vector3d> f_W,
                      double* l_star) const;
 
- private:
-  void UpdateA3DVariables(
-      const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const;
 
+ private:
   const size_t num_rays_{};
   std::unique_ptr<drake::multibody::MultibodyPlant<double>> plant_;
   std::unique_ptr<drake::multibody::MultibodyPlant<drake::AutoDiffXd>>
@@ -61,20 +62,15 @@ class GradientCalculator {
   mutable std::unique_ptr<drake::systems::Context<double>> plant_context_;
   mutable std::unique_ptr<drake::systems::Context<drake::AutoDiffXd>>
       plant_context_ad_;
-  mutable drake::MatrixX<drake::AutoDiffXd> J_ad_;
-  mutable drake::MatrixX<AutoDiff3d> Jc_a3d_;
-  mutable drake::MatrixX<AutoDiff3d> Jv_a3d_;
-  mutable Eigen::MatrixXd J_;
   mutable drake::math::RigidTransformd X_WL_;
-  mutable Eigen::MatrixXd vC_W_;
-  mutable drake::MatrixX<AutoDiff3d> vC_W_a3d_;
-  mutable Eigen::MatrixXd dQdy_;
-  mutable Eigen::MatrixXd dbdy_;
-  mutable Eigen::MatrixXd dldQ_;
-  mutable Eigen::VectorXd dldb_;
-  mutable drake::VectorX<AutoDiff3d> tau_ext_a3d_;
-  mutable Eigen::MatrixXd Q_;
-  mutable drake::MatrixX<AutoDiff3d> Q_a3d_;
-  mutable Eigen::VectorXd b_;
-  mutable drake::VectorX<AutoDiff3d> b_a3d_;
+  mutable Eigen::Matrix<AutoDiff3d, kNumRays, kNumPositions> Jv_a3d_;
+  mutable Eigen::Matrix<double, 6, kNumPositions> J_;
+  mutable Eigen::Matrix<double, 3, kNumRays> vC_W_;
+  mutable Eigen::Matrix<double, kNumRays, kNumRays> dldQ_;
+  mutable Eigen::Matrix<double, kNumRays, 1> dldb_;
+  mutable Eigen::Matrix<double, kNumRays, kNumRays> Q_;
+  mutable Eigen::Matrix<AutoDiff3d, kNumRays, kNumRays> Q_a3d_;
+  mutable Eigen::Matrix<double, kNumRays, 1> b_;
+  mutable Eigen::Matrix<AutoDiff3d, kNumRays, 1> b_a3d_;
+  mutable Eigen::Matrix<double, kNumRays, 1> x_star_;
 };

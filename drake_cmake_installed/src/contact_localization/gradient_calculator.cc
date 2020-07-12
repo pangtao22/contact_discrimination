@@ -14,6 +14,7 @@ using drake::math::DiscardGradient;
 using drake::math::initializeAutoDiff;
 using drake::multibody::MultibodyPlant;
 using Eigen::ArrayXd;
+using Eigen::Matrix;
 using Eigen::MatrixXd;
 using Eigen::Vector3d;
 using Eigen::VectorXd;
@@ -22,13 +23,11 @@ using std::cout;
 using std::endl;
 
 Eigen::MatrixXd CalcFrictionConeRays(
-    const Eigen::Ref<const Eigen::Vector3d>& normal, double mu, size_t nd) {
-  DRAKE_THROW_UNLESS(nd == 2 || nd == 4);
+    const Eigen::Ref<const Eigen::Vector3d>& normal, double mu) {
   // tangent vectors
 
-  Eigen::Matrix3Xd dC;
-  dC.resize(3, nd);
-  if (nd == 2) {
+  Eigen::Matrix<double, 3, kNumRays> dC;
+  if (kNumRays == 2) {
     dC.col(0) = Vector3d(1, 0, 0).cross(normal);
     dC.col(1) = -dC.col(0);
   } else {
@@ -43,8 +42,7 @@ Eigen::MatrixXd CalcFrictionConeRays(
     dC.col(3) = -dC.col(1);
   }
 
-  Eigen::Matrix3Xd vC;
-  vC.resize(3, nd);
+  Eigen::Matrix<double, 3, kNumRays> vC;
   vC = (mu * dC).colwise() + normal;
   vC /= sqrt(1 + mu * mu);
 
@@ -57,12 +55,15 @@ GradientCalculator::GradientCalculator(
     : num_rays_{num_rays},
       qp_solver_(std::make_unique<OsqpWrapper>(num_rays_)),
       plant_(std::make_unique<MultibodyPlant<double>>(1e-3)) {
+  DRAKE_THROW_UNLESS(num_rays == kNumRays);
+
   drake::multibody::Parser parser(plant_.get());
   parser.AddModelFromFile(robot_sdf_path);
   plant_->WeldFrames(plant_->world_frame(),
                      plant_->GetFrameByName(link_names[0]));
   plant_->mutable_gravity_field().set_gravity_vector({0, 0, 0});
   plant_->Finalize();
+  DRAKE_THROW_UNLESS(plant_->num_positions() == kNumPositions);
 
   plant_ad_ = drake::systems::System<double>::ToAutoDiffXd(*plant_);
   robot_model_ = plant_->GetModelInstanceByName(model_name);
@@ -71,35 +72,6 @@ GradientCalculator::GradientCalculator(
   }
   plant_context_ = plant_->CreateDefaultContext();
   plant_context_ad_ = plant_ad_->CreateDefaultContext();
-
-  // Initialize autodiff variables.
-  J_ad_.resize(6, plant_->num_actuated_dofs(robot_model_));
-  J_.resize(J_ad_.rows(), J_ad_.cols());
-  Jc_a3d_.resize(3, J_ad_.cols());
-  Jv_a3d_.resize(num_rays_, J_ad_.cols());
-
-  vC_W_.resize(3, num_rays_);
-  vC_W_a3d_.resize(vC_W_.rows(), vC_W_.cols());
-  for (size_t i = 0; i < vC_W_a3d_.rows(); i++) {
-    for (size_t j = 0; j < vC_W_a3d_.cols(); j++) {
-      vC_W_a3d_(i, j).derivatives().setZero();
-    }
-  }
-
-  dQdy_.resize(num_rays_ * num_rays_, 3);
-  dbdy_.resize(num_rays_, 3);
-  dldQ_.resize(num_rays_, num_rays_);
-  dldb_.resize(num_rays_);
-
-  tau_ext_a3d_.resize(plant_->num_positions());
-  for (size_t i = 0; i < tau_ext_a3d_.size(); i++) {
-    tau_ext_a3d_(i).derivatives().setZero();
-  }
-
-  Q_.resize(num_rays_, num_rays_);
-  b_.resize(num_rays_);
-  Q_a3d_.resize(num_rays_, num_rays_);
-  b_a3d_.resize(num_rays_);
 }
 
 void GradientCalculator::CalcFrictionConeRaysWorld(
@@ -110,32 +82,7 @@ void GradientCalculator::CalcFrictionConeRaysWorld(
   plant_->SetPositions(plant_context_.get(), q);
   X_WL_ = plant_->CalcRelativeTransform(*plant_context_, plant_->world_frame(),
                                         plant_->get_frame(contact_frame_idx));
-  vC_W_ = X_WL_.rotation() * CalcFrictionConeRays(normal_L, 1, num_rays_);
-  for (size_t i = 0; i < vC_W_a3d_.rows(); i++) {
-    for (size_t j = 0; j < vC_W_a3d_.cols(); j++) {
-      vC_W_a3d_(i, j).value() = vC_W_(i, j);
-    }
-  }
-}
-
-void GradientCalculator::UpdateA3DVariables(
-    const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const {
-  for (size_t i = 0; i < Jc_a3d_.rows(); i++) {
-    for (size_t j = 0; j < Jc_a3d_.cols(); j++) {
-      Jc_a3d_(i, j).value() = J_ad_(i + 3, j).value();
-      int d_size = J_ad_(i + 3, j).derivatives().size();
-      assert(d_size == 0 || d_size == 3);
-      if (d_size == 3) {
-        Jc_a3d_(i, j).derivatives() = J_ad_(i + 3, j).derivatives();
-      } else {
-        Jc_a3d_(i, j).derivatives().setZero();
-      }
-    }
-  }
-
-  for (size_t i = 0; i < tau_ext.size(); i++) {
-    tau_ext_a3d_[i].value() = tau_ext[i];
-  }
+  vC_W_ = X_WL_.rotation() * CalcFrictionConeRays(normal_L, 1);
 }
 
 bool GradientCalculator::CalcDlDp(
@@ -148,45 +95,74 @@ bool GradientCalculator::CalcDlDp(
   CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L, normal_L);
 
   const auto& contact_frame_idx = frame_indices_[contact_link_idx];
+  //---------------------------------------------------------------------------
+  plant_->CalcJacobianSpatialVelocity(
+      *plant_context_, drake::multibody::JacobianWrtVariable::kQDot,
+      plant_->get_frame(contact_frame_idx), Vector3d::Zero(),
+      plant_->world_frame(), plant_->get_frame(contact_frame_idx), &J_);
 
-  auto p_LQ_L_ad = initializeAutoDiff(p_LQ_L);
-  plant_ad_->SetPositions(plant_context_ad_.get(), q);
-  plant_ad_->CalcJacobianSpatialVelocity(
-      *plant_context_ad_, drake::multibody::JacobianWrtVariable::kQDot,
-      plant_ad_->get_frame(contact_frame_idx), p_LQ_L_ad,
-      plant_ad_->world_frame(), plant_ad_->world_frame(), &J_ad_);
-  UpdateA3DVariables(tau_ext);
+  Matrix<AutoDiff3d, 3, 1> p_LQ_L_a3d;
+  for (int i = 0; i < 3; i++) {
+    p_LQ_L_a3d[i].value() = p_LQ_L[i];
+    p_LQ_L_a3d[i].derivatives().setZero();
+    p_LQ_L_a3d[i].derivatives()[i] = 1;
+  }
 
-  Jv_a3d_ = vC_W_a3d_.transpose() * Jc_a3d_;  // CalcJ
-  Q_a3d_ = Jv_a3d_ * Jv_a3d_.transpose();     // CalcQ
-  b_a3d_ = -Jv_a3d_ * tau_ext_a3d_;           // Calcb
+  Matrix<AutoDiff3d, 3, 3> Sp;
+  Sp.setZero();
+  Sp(0, 1) = -p_LQ_L_a3d[2];
+  Sp(1, 0) = p_LQ_L_a3d[2];
+  Sp(0, 2) = p_LQ_L_a3d[1];
+  Sp(2, 0) = -p_LQ_L_a3d[1];
+  Sp(1, 2) = -p_LQ_L_a3d[0];
+  Sp(2, 1) = p_LQ_L_a3d[0];
+
+  //  cout << "Jc_old\n" << Jc_a3d_ << endl;
+  //  cout << "Jc_new\n" << Jc_a3d << endl;
+  //  cout << "derivatives\n" << endl;
+  //  for(int i = 0; i < Jc_a3d.rows(); i++) {
+  //    for(int j = 0; j < Jc_a3d.cols(); j++) {
+  //      cout << i << " " << j << ": " << endl;
+  //      cout << Jc_a3d_(i, j).derivatives().transpose() << endl;
+  //      cout << Jc_a3d(i, j).derivatives().transpose() << endl;
+  //    }
+  //  }
+
+  //---------------------------------------------------------------------------
+
+  Jv_a3d_ =
+      vC_W_.transpose() *
+      (X_WL_.rotation() * (-Sp * J_.topRows(3) + J_.bottomRows(3)));  // CalcJ
+  Q_a3d_ = Jv_a3d_ * Jv_a3d_.transpose();                             // CalcQ
+  b_a3d_ = -Jv_a3d_ * tau_ext;                                        // Calcb
 
   for (int j = 0; j < num_rays_; j++) {
-    dbdy_.row(j) = b_a3d_(j).derivatives();
     b_(j) = b_a3d_(j).value();
     for (int i = 0; i < num_rays_; i++) {
-      dQdy_.row(i + j * num_rays_) = Q_a3d_(i, j).derivatives();
       Q_(i, j) = Q_a3d_(i, j).value();
     }
   }
 
-  VectorXd x_star(num_rays_);
   const bool is_qp_solved =
-      qp_solver_->SolveGradient(Q_, b_, &x_star, l_star_ptr, &dldQ_, &dldb_);
+      qp_solver_->SolveGradient(Q_, b_, &x_star_, l_star_ptr, &dldQ_, &dldb_);
   if (!is_qp_solved) {
     return false;
   }
-
   *l_star_ptr += 0.5 * tau_ext.squaredNorm();
 
-  Eigen::Map<ArrayXd> dldQ_v(dldQ_.data(), dldQ_.size());
   Vector3d dldy = Vector3d::Zero();
   for (size_t i = 0; i < 3; i++) {
-    dldy[i] += (dldQ_v * dQdy_.col(i).array()).sum();
-    dldy[i] += (dldb_.array() * dbdy_.col(i).array()).sum();
+    for (size_t j = 0; j < kNumRays; j++) {
+      for (size_t k = 0; k < kNumRays; k++) {
+        dldy[i] += dldQ_(j, k) * Q_a3d_(j, k).derivatives()[i];
+      }
+    }
+    for (size_t j = 0; j < kNumRays; j++) {
+      dldy[i] += dldb_[j] * b_a3d_[j].derivatives()[i];
+    }
   }
 
-  *fW_ptr = vC_W_ * x_star;
+  *fW_ptr = vC_W_ * x_star_;
   *dldy_ptr = dldy;
 
   return true;
