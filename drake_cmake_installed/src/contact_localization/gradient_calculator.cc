@@ -22,38 +22,27 @@ using Eigen::VectorXd;
 using std::cout;
 using std::endl;
 
-Eigen::MatrixXd CalcFrictionConeRays(
-    const Eigen::Ref<const Eigen::Vector3d>& normal, double mu) {
-  // tangent vectors
+template <class T>
+inline Matrix<T, 3, 3> skew_symmetric(
+    const Eigen::Ref<const Matrix<T, 3, 1>>& p) {
+  Matrix<T, 3, 3> Sp;
+  Sp.setZero();
+  Sp(0, 1) = -p[2];
+  Sp(1, 0) = p[2];
+  Sp(0, 2) = p[1];
+  Sp(2, 0) = -p[1];
+  Sp(1, 2) = -p[0];
+  Sp(2, 1) = p[0];
 
-  Eigen::Matrix<double, 3, kNumRays> dC;
-  if (kNumRays == 2) {
-    dC.col(0) = Vector3d(1, 0, 0).cross(normal);
-    dC.col(1) = -dC.col(0);
-  } else {
-    if (normal.head(2).norm() < 1e-6) {
-      dC.col(0) << 0, normal[2], -normal[1];
-    } else {
-      dC.col(0) << normal[1], -normal[0], 0;
-    }
-    dC.col(0).normalize();
-    dC.col(1) = normal.cross(dC.col(0));
-    dC.col(2) = -dC.col(0);
-    dC.col(3) = -dC.col(1);
-  }
-
-  Eigen::Matrix<double, 3, kNumRays> vC;
-  vC = (mu * dC).colwise() + normal;
-  vC /= sqrt(1 + mu * mu);
-
-  return vC;
+  return Sp;
 }
 
 GradientCalculator::GradientCalculator(
     const std::string& robot_sdf_path, const std::string& model_name,
     const std::vector<std::string>& link_names, size_t num_rays)
-    : num_rays_{num_rays},
-      qp_solver_(std::make_unique<OsqpWrapper>(num_rays_)),
+    : num_rays_(num_rays),
+      mu_(1.),
+      qp_solver_(std::make_unique<OsqpWrapper>(num_rays)),
       plant_(std::make_unique<MultibodyPlant<double>>(1e-3)) {
   DRAKE_THROW_UNLESS(num_rays == kNumRays);
 
@@ -65,41 +54,88 @@ GradientCalculator::GradientCalculator(
   plant_->Finalize();
   DRAKE_THROW_UNLESS(plant_->num_positions() == kNumPositions);
 
-  plant_ad_ = drake::systems::System<double>::ToAutoDiffXd(*plant_);
   robot_model_ = plant_->GetModelInstanceByName(model_name);
   for (const auto& name : link_names) {
     frame_indices_.emplace_back(plant_->GetFrameByName(name).index());
   }
   plant_context_ = plant_->CreateDefaultContext();
-  plant_context_ad_ = plant_ad_->CreateDefaultContext();
 }
 
-void GradientCalculator::CalcFrictionConeRaysWorld(
+void GradientCalculator::CalcFrictionConeRays(
+    const Eigen::Ref<const Eigen::Vector3d>& normal, double mu) const {
+  // tangent vectors
+  if (num_rays_ == 2) {
+    vC_.col(0) = Vector3d(1, 0, 0).cross(normal);
+    vC_.col(1) = -vC_.col(0);
+  } else {
+    if (normal.head(2).norm() < 1e-6) {
+      vC_.col(0) << 0, normal[2], -normal[1];
+    } else {
+      vC_.col(0) << normal[1], -normal[0], 0;
+    }
+    vC_.col(0).normalize();
+    vC_.col(1) = normal.cross(vC_.col(0));
+    vC_.col(2) = -vC_.col(0);
+    vC_.col(3) = -vC_.col(1);
+  }
+
+  for (int i = 0; i < vC_.cols(); i++) {
+    vC_.col(i) *= mu;
+    vC_.col(i) += normal;
+  }
+
+  vC_ /= sqrt(1 + mu * mu);
+}
+
+Matrix<double, 3, kNumRays> GradientCalculator::CalcFrictionConeRaysWorld(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link,
     const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L) const {
-  const auto& contact_frame_idx = frame_indices_[contact_link];
   plant_->SetPositions(plant_context_.get(), q);
-  X_WL_ = plant_->CalcRelativeTransform(*plant_context_, plant_->world_frame(),
-                                        plant_->get_frame(contact_frame_idx));
-  vC_W_ = X_WL_.rotation() * CalcFrictionConeRays(normal_L, 1);
+  const auto& contact_frame_idx = frame_indices_[contact_link];
+  auto X_WL =
+      plant_->CalcRelativeTransform(*plant_context_, plant_->world_frame(),
+                                    plant_->get_frame(contact_frame_idx));
+  CalcFrictionConeRays(normal_L, 1);
+  return X_WL.rotation() * vC_;
 }
 
-bool GradientCalculator::CalcDlDp(
+/*
+ * dQ_ij / dJv_kl
+ */
+double GradientCalculator::dQdJv(int i, int j, int k, int l) const {
+  if (k == i && k != j) {
+    return J_(j, l);
+  }
+  if (k != i && k == j) {
+    return J_(i, l);
+  }
+  if (k == i && k == j) {
+    return 2 * J_(k, l);
+  }
+  return 0;
+}
+
+void GradientCalculator::UpdateKinematics(
+    const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
+    const Eigen::Ref<const Eigen::Vector3d>& normal_L) const {
+  CalcFrictionConeRays(normal_L, mu_);
+  plant_->SetPositions(plant_context_.get(), q);
+  const auto& contact_frame_idx = frame_indices_[contact_link_idx];
+  plant_->CalcJacobianSpatialVelocity(
+      *plant_context_, drake::multibody::JacobianWrtVariable::kQDot,
+      plant_->get_frame(contact_frame_idx), Vector3d::Zero(),
+      plant_->world_frame(), plant_->get_frame(contact_frame_idx), &J_L_);
+}
+
+bool GradientCalculator::CalcDlDpAutoDiff(
     const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
     drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
-    drake::EigenPtr<Eigen::Vector3d> fW_ptr, double* l_star_ptr) const {
-  CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L, normal_L);
-
-  const auto& contact_frame_idx = frame_indices_[contact_link_idx];
-  //---------------------------------------------------------------------------
-  plant_->CalcJacobianSpatialVelocity(
-      *plant_context_, drake::multibody::JacobianWrtVariable::kQDot,
-      plant_->get_frame(contact_frame_idx), Vector3d::Zero(),
-      plant_->world_frame(), plant_->get_frame(contact_frame_idx), &J_);
+    drake::EigenPtr<Eigen::Vector3d> f_L_ptr, double* l_star_ptr) const {
+  UpdateKinematics(q, contact_link_idx, normal_L);
 
   Matrix<AutoDiff3d, 3, 1> p_LQ_L_a3d;
   for (int i = 0; i < 3; i++) {
@@ -108,33 +144,12 @@ bool GradientCalculator::CalcDlDp(
     p_LQ_L_a3d[i].derivatives()[i] = 1;
   }
 
-  Matrix<AutoDiff3d, 3, 3> Sp;
-  Sp.setZero();
-  Sp(0, 1) = -p_LQ_L_a3d[2];
-  Sp(1, 0) = p_LQ_L_a3d[2];
-  Sp(0, 2) = p_LQ_L_a3d[1];
-  Sp(2, 0) = -p_LQ_L_a3d[1];
-  Sp(1, 2) = -p_LQ_L_a3d[0];
-  Sp(2, 1) = p_LQ_L_a3d[0];
+  auto Sp_a3d = skew_symmetric<AutoDiff3d>(p_LQ_L_a3d);
 
-  //  cout << "Jc_old\n" << Jc_a3d_ << endl;
-  //  cout << "Jc_new\n" << Jc_a3d << endl;
-  //  cout << "derivatives\n" << endl;
-  //  for(int i = 0; i < Jc_a3d.rows(); i++) {
-  //    for(int j = 0; j < Jc_a3d.cols(); j++) {
-  //      cout << i << " " << j << ": " << endl;
-  //      cout << Jc_a3d_(i, j).derivatives().transpose() << endl;
-  //      cout << Jc_a3d(i, j).derivatives().transpose() << endl;
-  //    }
-  //  }
-
-  //---------------------------------------------------------------------------
-
-  Jv_a3d_ =
-      vC_W_.transpose() *
-      (X_WL_.rotation() * (-Sp * J_.topRows(3) + J_.bottomRows(3)));  // CalcJ
-  Q_a3d_ = Jv_a3d_ * Jv_a3d_.transpose();                             // CalcQ
-  b_a3d_ = -Jv_a3d_ * tau_ext;                                        // Calcb
+  // CalcJ
+  J_a3d_ = vC_.transpose() * (-Sp_a3d * J_L_.topRows(3) + J_L_.bottomRows(3));
+  Q_a3d_ = J_a3d_ * J_a3d_.transpose();  // CalcQ
+  b_a3d_ = -J_a3d_ * tau_ext;            // Calcb
 
   for (int j = 0; j < num_rays_; j++) {
     b_(j) = b_a3d_(j).value();
@@ -162,9 +177,51 @@ bool GradientCalculator::CalcDlDp(
     }
   }
 
-  *fW_ptr = vC_W_ * x_star_;
+  *f_L_ptr = vC_ * x_star_;
   *dldy_ptr = dldy;
+  return true;
+}
 
+bool GradientCalculator::CalcDlDp(
+    const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
+    const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+    const Eigen::Ref<const Eigen::Vector3d>& normal_L,
+    const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+    drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
+    drake::EigenPtr<Eigen::Vector3d> f_L_ptr, double* l_star_ptr) const {
+  UpdateKinematics(q, contact_link_idx, normal_L);
+  J_ = vC_.transpose() *
+       (-skew_symmetric<double>(p_LQ_L) * J_L_.topRows(3) + J_L_.bottomRows(3));
+  Q_ = J_ * J_.transpose();  // CalcQ
+  b_ = -J_ * tau_ext;        // Calcb
+
+  const bool is_qp_solved =
+      qp_solver_->SolveGradient(Q_, b_, &x_star_, l_star_ptr, &dldQ_, &dldb_);
+  if (!is_qp_solved) {
+    return false;
+  }
+  *l_star_ptr += 0.5 * tau_ext.squaredNorm();
+
+  dldJ_.setZero();
+  for (int k = 0; k < dldJ_.rows(); k++) {
+    for (int l = 0; l < dldJ_.cols(); l++) {
+      for (int i = 0; i < dldQ_.rows(); i++) {
+        for (int j = 0; j < dldQ_.cols(); j++) {
+          dldJ_(k, l) += dldQ_(i, j) * dQdJv(i, j, k, l);
+        }
+      }
+    }
+  }
+
+  dldJ_ += -dldb_ * tau_ext.transpose();
+  dldE_ = dldJ_ * J_L_.topRows(3).transpose();
+  dldSp_ = -vC_ * dldE_;
+  dldp_[0] = dldSp_(2, 1) - dldSp_(1, 2);
+  dldp_[1] = dldSp_(0, 2) - dldSp_(2, 0);
+  dldp_[2] = dldSp_(1, 0) - dldSp_(0, 1);
+
+  *f_L_ptr = vC_ * x_star_;
+  *dldy_ptr = dldp_;
   return true;
 }
 
@@ -173,25 +230,16 @@ bool GradientCalculator::CalcContactQp(
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-    drake::EigenPtr<Eigen::Vector3d> f_W, double* l_star) const {
-  CalcFrictionConeRaysWorld(q, contact_link_idx, p_LQ_L, normal_L);
+    drake::EigenPtr<Eigen::Vector3d> f_L, double* l_star) const {
+  UpdateKinematics(q, contact_link_idx, normal_L);
+  J_ = vC_.transpose() *
+       (-skew_symmetric<double>(p_LQ_L) * J_L_.topRows(3) + J_L_.bottomRows(3));
+  Q_ = J_ * J_.transpose();  // CalcQ
+  b_ = -J_ * tau_ext;        // Calcb
 
-  const auto& contact_frame_idx = frame_indices_[contact_link_idx];
-
-  plant_->SetPositions(plant_context_.get(), q);
-  plant_->CalcJacobianSpatialVelocity(
-      *plant_context_, drake::multibody::JacobianWrtVariable::kQDot,
-      plant_->get_frame(contact_frame_idx), p_LQ_L, plant_->world_frame(),
-      plant_->world_frame(), &J_);
-
-  MatrixXd J = vC_W_.transpose() * J_.bottomRows(3);  // CalcJ
-  MatrixXd Q = J * J.transpose();                     // CalcQ
-  VectorXd b = -J * tau_ext;                          // Calcb
-
-  VectorXd x_star(num_rays_);
-  if (qp_solver_->Solve(Q, b, &x_star, l_star)) {
-    *f_W = vC_W_ * x_star;
-    *l_star += +0.5 * tau_ext.squaredNorm();
+  if (qp_solver_->Solve(Q_, b_, &x_star_, l_star)) {
+    *f_L = vC_ * x_star_;
+    *l_star += 0.5 * tau_ext.squaredNorm();
     return true;
   }
   return false;

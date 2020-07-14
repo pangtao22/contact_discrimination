@@ -17,7 +17,6 @@ const char kPlanarArmSdf[] =
     "three_link_arm.sdf";
 
 constexpr size_t kNumPositions = 7;
-constexpr size_t kNumRays = 4;
 
 Eigen::MatrixXd CalcFrictionConeRays(
     const Eigen::Ref<const Eigen::Vector3d>& normal, double mu, size_t nd);
@@ -29,48 +28,70 @@ class GradientCalculator {
                      const std::string& model_name,
                      const std::vector<std::string>& link_names,
                      size_t num_rays);
-  void CalcFrictionConeRaysWorld(
-      const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link,
-      const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L,
-      const Eigen::Ref<const Eigen::Vector3d>& normal_L) const;
-  bool CalcDlDp(const Eigen::Ref<const Eigen::VectorXd> &q,
+  bool CalcDlDp(const Eigen::Ref<const Eigen::VectorXd>& q,
                 size_t contact_link_idx,
-                const Eigen::Ref<const Eigen::Vector3d> &p_LQ_L,
-                const Eigen::Ref<const Eigen::Vector3d> &normal_L,
-                const Eigen::Ref<const Eigen::VectorXd> &tau_ext,
+                const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+                const Eigen::Ref<const Eigen::Vector3d>& normal_L,
+                const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
                 drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
-                drake::EigenPtr<Eigen::Vector3d> fW_ptr,
-                double *l_star_ptr) const;
+                drake::EigenPtr<Eigen::Vector3d> f_L_ptr,
+                double* l_star_ptr) const;
+  bool CalcDlDpAutoDiff(const Eigen::Ref<const Eigen::VectorXd>& q,
+                        size_t contact_link_idx,
+                        const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+                        const Eigen::Ref<const Eigen::Vector3d>& normal_L,
+                        const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
+                        drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
+                        drake::EigenPtr<Eigen::Vector3d> f_L_ptr,
+                        double* l_star_ptr) const;
   bool CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
                      size_t contact_link_idx,
                      const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
                      const Eigen::Ref<const Eigen::Vector3d>& normal_L,
                      const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-                     drake::EigenPtr<Eigen::Vector3d> f_W,
+                     drake::EigenPtr<Eigen::Vector3d> f_L,
                      double* l_star) const;
 
-
  private:
+  void UpdateKinematics(
+      const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
+      const Eigen::Ref<const Eigen::Vector3d>& normal_L) const;
+  void CalcFrictionConeRays(const Eigen::Ref<const Eigen::Vector3d>& normal,
+                            double mu) const;
+  double dQdJv(int i, int j, int k, int l) const;
+  Eigen::Matrix<double, 3, kNumRays> CalcFrictionConeRaysWorld(
+      const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link,
+      const Eigen::Ref<const Eigen::Vector3d>& p_LoQ_L,
+      const Eigen::Ref<const Eigen::Vector3d>& normal_L) const;
+
   const size_t num_rays_{};
+  const double mu_{};
   std::unique_ptr<drake::multibody::MultibodyPlant<double>> plant_;
-  std::unique_ptr<drake::multibody::MultibodyPlant<drake::AutoDiffXd>>
-      plant_ad_;
   std::unique_ptr<OsqpWrapper> qp_solver_;
   drake::multibody::ModelInstanceIndex robot_model_;
   std::vector<drake::multibody::FrameIndex> frame_indices_;
 
+  // UpdateKinematics
   mutable std::unique_ptr<drake::systems::Context<double>> plant_context_;
-  mutable std::unique_ptr<drake::systems::Context<drake::AutoDiffXd>>
-      plant_context_ad_;
-  mutable drake::math::RigidTransformd X_WL_;
-  mutable Eigen::Matrix<AutoDiff3d, kNumRays, kNumPositions> Jv_a3d_;
-  mutable Eigen::Matrix<double, 6, kNumPositions> J_;
-  mutable Eigen::Matrix<double, 3, kNumRays> vC_W_;
+  mutable Eigen::Matrix<double, 6, kNumPositions> J_L_;
+  mutable Eigen::Matrix<double, 3, kNumRays> vC_;
+
+  // Sovling QP and its gradient
+  mutable Eigen::Matrix<double, kNumRays, kNumRays> Q_;
+  mutable Eigen::Matrix<double, kNumRays, 1> b_;
   mutable Eigen::Matrix<double, kNumRays, kNumRays> dldQ_;
   mutable Eigen::Matrix<double, kNumRays, 1> dldb_;
-  mutable Eigen::Matrix<double, kNumRays, kNumRays> Q_;
-  mutable Eigen::Matrix<AutoDiff3d, kNumRays, kNumRays> Q_a3d_;
-  mutable Eigen::Matrix<double, kNumRays, 1> b_;
-  mutable Eigen::Matrix<AutoDiff3d, kNumRays, 1> b_a3d_;
   mutable Eigen::Matrix<double, kNumRays, 1> x_star_;
+
+  // CalcGradientAutoDiff
+  mutable Eigen::Matrix<AutoDiff3d, kNumRays, kNumPositions> J_a3d_;
+  mutable Eigen::Matrix<AutoDiff3d, kNumRays, kNumRays> Q_a3d_;
+  mutable Eigen::Matrix<AutoDiff3d, kNumRays, 1> b_a3d_;
+
+  // CalcGradient
+  mutable Eigen::Matrix<double, kNumRays, kNumPositions> J_;
+  mutable Eigen::Matrix<double, kNumRays, kNumPositions> dldJ_;
+  mutable Eigen::Matrix<double, kNumRays, 3> dldE_;
+  mutable Eigen::Matrix<double, 3, 1> dldp_;
+  mutable Eigen::Matrix<double, 3, 3> dldSp_;
 };

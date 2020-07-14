@@ -68,14 +68,6 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
     u_[i] = std::numeric_limits<c_float>::infinity();
   }
   A_p_[num_vars_] = num_vars_;
-//
-//      PrintArray(P_i_, P_nnz_, "P_i");
-//      PrintArray(P_p_, num_vars_ + 1, "P_p");
-//      PrintArray(A_x_, num_vars_, "A_x");
-//      PrintArray(A_i_, num_vars_, "A_i");
-//      PrintArray(A_p_, num_vars_ + 1, "A_p_");
-//      PrintArray(l_, num_vars_, "l");
-//      PrintArray(u_, num_vars_, "u");
 
   // Populate data.
   if (data_) {
@@ -96,7 +88,10 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   }
 
   // Setup workspace
-  assert(osqp_setup(&work_, data_, settings_) == 0);
+  auto setup_status = osqp_setup(&work_, data_, settings_);
+  if (setup_status != 0) {
+    throw std::runtime_error("osqp workspace not setup properly.");
+  }
 }
 
 void OsqpWrapper::UpdateQpParameters(const Eigen::Ref<Eigen::MatrixXd>& Q,
@@ -121,9 +116,6 @@ bool OsqpWrapper::Solve(const Eigen::Ref<Eigen::MatrixXd> &Q,
                         double *l_star) const {
   // Update data.
   UpdateQpParameters(Q, b);
-  //  PrintArray(P_x_new_.data(), P_x_new_.size(), "P_new");
-  //  PrintArray(q_new_.data(), q_new_.size(), "q");
-
   osqp_update_P(work_, P_x_.data(), OSQP_NULL, P_nnz_);
   osqp_update_lin_cost(work_, q_.data());
 
@@ -142,14 +134,6 @@ bool OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd> &Q,
                                 double *l_star,
                                 drake::EigenPtr<Eigen::MatrixXd> dlDQ,
                                 drake::EigenPtr<Eigen::VectorXd> dldb) const {
-
-  //  cout << "Status: " << work_->info->status << endl;
-  //  cout << "Status val: " << work_->info->status_val << endl;
-  //  cout << "Runtime: " << work_->info->run_time << endl;
-  //  cout << "Obj: " << work_->info->obj_val << endl;
-  //  PrintArray(work_->solution->x, num_vars_, "x");
-  //  PrintArray(work_->solution->y, num_vars_, "y");
-
   // Solve problem
   if(!Solve(Q, b, x_star, l_star)) {
     return false;

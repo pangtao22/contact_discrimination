@@ -53,7 +53,7 @@ int main() {
   Vector3d dldp;
   double l_star;
   Vector3d dlduv;
-  Vector3d f_W;
+  Vector3d f_L;
   size_t iter_count{0};
 
   std::vector<Vector3d> log_normals_L = {normal_L};
@@ -67,7 +67,7 @@ int main() {
                         -normal_L,
                         tau_ext,
                         &dldp,
-                        &f_W,
+                        &f_L,
                         &l_star);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = duration_cast<std::chrono::microseconds>(end - start);
@@ -79,6 +79,17 @@ int main() {
     cout << "dlduv: " << dlduv.transpose() << endl;
     cout << "l_star: " << l_star << endl;
     cout << "Gradient time: " << duration.count() << endl;
+
+    calculator.CalcDlDpAutoDiff(q,
+                                contact_link_idx,
+                                p_LQ_L,
+                                -normal_L,
+                                tau_ext,
+                                &dldp,
+                                &f_L,
+                                &l_star);
+    cout << "dldp_autodiff: " << dldp.transpose() << endl;
+
     if (dlduv.norm() < 1e-3) {
       break;
     }
@@ -86,19 +97,26 @@ int main() {
     start = std::chrono::high_resolution_clock::now();
     // Line search
     double alpha = 0.4;
-    double beta = 0.5;
+    double beta = 0.2;
     double t = std::min(0.02 / dlduv.norm(), 1.);
     size_t line_search_steps = 0;
     double l_star_ls;  // line search
 
     while (true) {
       calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv, -normal_L,
-                               tau_ext, &f_W, &l_star_ls);
+                               tau_ext, &f_L, &l_star_ls);
       if(l_star_ls < l_star - alpha * t * dlduv.squaredNorm()) {
         break;
       }
       t *= beta;
       line_search_steps++;
+
+      if (line_search_steps > 10) {
+        break;
+      }
+    }
+    if (line_search_steps > 10) {
+      break;
     }
     p_LQ_L += -t * dlduv;
 
@@ -129,7 +147,7 @@ int main() {
     iter_count++;
   }
   cout << "\nFinal position: " << p_LQ_L.transpose() << endl;
-  cout << "f_W: " << f_W.transpose() << endl;
+  cout << "f_L: " << f_L.transpose() << endl;
   // Save logs to files
   const std::string name = "gradient_descent_on_link_6";
   std::ofstream file_points(name + "_points.csv");

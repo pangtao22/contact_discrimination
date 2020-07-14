@@ -6,6 +6,8 @@
 #include <osqp.h>
 #include <drake/common/eigen_types.h>
 
+constexpr size_t kNumRays = 4;
+
 class OsqpWrapper {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(OsqpWrapper);
