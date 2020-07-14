@@ -22,6 +22,10 @@ void PrintArray(T* ptr, size_t size, const std::string& name = "") {
 
 OsqpWrapper::OsqpWrapper(size_t x_size)
     : num_vars_(x_size), P_nnz_((x_size + 1) * x_size / 2), A_nnz_(x_size) {
+  if(num_vars_ != kNumRays) {
+    throw std::runtime_error("QP problem size and kNumRays do not match.");
+  }
+
   // Allocate memory.
   settings_ = static_cast<OSQPSettings*>(c_malloc(sizeof(OSQPSettings)));
   data_ = static_cast<OSQPData*>(c_malloc(sizeof(OSQPData)));
@@ -92,6 +96,10 @@ OsqpWrapper::OsqpWrapper(size_t x_size)
   if (setup_status != 0) {
     throw std::runtime_error("osqp workspace not setup properly.");
   }
+
+  //
+  G_.setIdentity();
+  G_ *= -1;
 }
 
 void OsqpWrapper::UpdateQpParameters(const Eigen::Ref<Eigen::MatrixXd>& Q,
@@ -141,43 +149,37 @@ bool OsqpWrapper::SolveGradient(const Eigen::Ref<Eigen::MatrixXd> &Q,
 
   const size_t nx = work_->data->n;
   const size_t n_lambda = work_->data->m;
-
-  // Gradient
-  MatrixXd G(n_lambda, n_lambda);
-  G.setIdentity();
-  G *= -1;
-
-  VectorXd lambda_star(n_lambda);
-  for (size_t i = 0; i < n_lambda; i++) {
-    double yi = (work_->solution->y)[i];
-    lambda_star[i] = -(yi < 0 ? yi : 0);
+  if(nx != num_vars_ || n_lambda != num_vars_) {
+    throw std::runtime_error("nx != num_vars_ || n_lambda != num_vars_");
   }
 
-  VectorXd a0(nx);
-  a0.setZero();
+  // Gradient
+  for (size_t i = 0; i < n_lambda; i++) {
+    double yi = (work_->solution->y)[i];
+    lambda_star_[i] = -(yi < 0 ? yi : 0);
+  }
 
-  if (lambda_star.norm() > 1e-6) {
+  a0_.setZero();
+  if (lambda_star_.norm() > 1e-6) {
     // When the inequlaity constraints are tight.
-    MatrixXd A_inverse(nx + n_lambda, nx + n_lambda);
-    VectorXd h(nx);
-    A_inverse.setZero();
-    h.setZero();
+    A_inverse_.setZero();
+    h_.setZero();
 
-    A_inverse.topLeftCorner(nx, nx) = Q;
-    A_inverse.topRightCorner(nx, n_lambda) = G.transpose();
-    A_inverse.bottomLeftCorner(n_lambda, nx) = lambda_star.asDiagonal() * G;
-    A_inverse.bottomRightCorner(n_lambda, n_lambda).diagonal() =
-        G * (*x_star) - h;
+    A_inverse_.topLeftCorner(nx, nx) = Q;
+    A_inverse_.topRightCorner(nx, n_lambda) = G_.transpose();
+    A_inverse_.bottomLeftCorner(n_lambda, nx) = lambda_star_.asDiagonal() * G_;
+    A_inverse_.bottomRightCorner(n_lambda, n_lambda).diagonal() =
+        G_ * (*x_star) - h_;
 
-    MatrixXd A = A_inverse.inverse();
-    const MatrixXd& A11 = A.topLeftCorner(nx, nx);
-    a0 = A11.transpose() * (b + Q * (*x_star));
+    A_ = A_inverse_.inverse();
+    const MatrixXd& A11 = A_.topLeftCorner(nx, nx);
+    a0_ = A11.transpose() * (b + Q * (*x_star));
     //    cout << "large multipliers\n" << endl;
   }
 
-  Eigen::RowVectorXd a1 = 0.5 * x_star->transpose() - a0.transpose();
-  *dlDQ = a1.transpose() * x_star->transpose();
-  *dldb = -a0 + *x_star;
+  a1_ = 0.5 * x_star->transpose() - a0_.transpose();
+  *dlDQ = a1_.transpose() * x_star->transpose();
+  *dldb = -a0_ + *x_star;
 
   //  cout << "A_inverse\n" << A_inverse << endl;
   //  cout << "A\n" << A << endl;

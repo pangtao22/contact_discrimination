@@ -46,7 +46,7 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
   Vector3d normal_L = normal_L_initial;
   size_t iter_count{0};
 
-  const size_t line_search_steps_limit = 50;
+  const size_t line_search_steps_limit = 10;
 
   log_points_L_.clear();
   log_normals_L_.clear();

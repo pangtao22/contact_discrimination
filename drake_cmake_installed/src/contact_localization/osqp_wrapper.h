@@ -47,4 +47,12 @@ class OsqpWrapper {
 
   mutable std::vector<c_float> P_x_{};
   mutable std::vector<c_float> q_{};
+
+  mutable Eigen::Matrix<double, kNumRays, kNumRays> G_;
+  mutable Eigen::Matrix<double, kNumRays, 1> lambda_star_;
+  mutable Eigen::Matrix<double, kNumRays, 1> a0_;
+  mutable Eigen::Matrix<double, 2 * kNumRays, 2*kNumRays> A_inverse_;
+  mutable Eigen::Matrix<double, kNumRays, 1> h_;
+  mutable Eigen::Matrix<double, 2 * kNumRays, 2*kNumRays> A_;
+  mutable Eigen::Matrix<double, 1, kNumRays> a1_;
 };
