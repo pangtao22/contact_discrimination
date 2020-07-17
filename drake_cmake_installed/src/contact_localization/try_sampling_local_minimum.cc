@@ -46,7 +46,7 @@ int main() {
       0.;
   const size_t contact_link_idx = 5;
 
-  const size_t iteration_limit = 100;
+  const size_t iteration_limit = 50;
   Vector3d p_LQ_L_final;
   Vector3d normal_L_final;
   Vector3d f_W_final;
@@ -70,7 +70,7 @@ int main() {
   std::vector<double> l_star_final_log;
   std::vector<Vector3d> p_LQ_L_final_log;
 
-  for (int i = 0; i < 20; i++) {
+  for (int i = 0; i < 100; i++) {
     dlduv_norm_final = 1e6;
     bool is_successful = lm_sampler.SampleLocalMinimum(
         q, tau_ext, contact_link_idx, iteration_limit, &p_LQ_L_final,

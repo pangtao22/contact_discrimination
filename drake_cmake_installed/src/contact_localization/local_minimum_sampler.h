@@ -3,6 +3,16 @@
 #include "gradient_calculator.h"
 #include "proximity_wrapper.h"
 
+struct LocalMinimumSamplerConfig {
+  std::string robot_sdf_path;
+  std::string model_name;
+  std::vector<std::string> link_names;
+  std::vector<std::string> link_mesh_paths;
+  std::vector<int> active_link_indices;
+
+};
+
+
 class LocalMinimumSampler {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(LocalMinimumSampler)

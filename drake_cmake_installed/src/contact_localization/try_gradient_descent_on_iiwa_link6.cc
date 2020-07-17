@@ -131,8 +131,14 @@ int main() {
     size_t triangle_idx;
     double distance;
     p_LQ_L += normal_L * 2 * epsilon;
+
+    start = std::chrono::high_resolution_clock::now();
     p_query.FindClosestPoint(p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx,
                              &distance);
+    end = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(end - start);
+
+    cout << "proximity time: " << duration.count() << endl;
     cout << "p_LQ_L: " << p_LQ_L.transpose() << endl;
     cout << "p_LQ_L_mesh: " << p_LQ_L_mesh.transpose() << endl;
     cout << "new_normal_L: " << normal_L.transpose() << endl;

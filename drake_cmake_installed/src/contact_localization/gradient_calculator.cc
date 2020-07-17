@@ -165,20 +165,20 @@ bool GradientCalculator::CalcDlDpAutoDiff(
   }
   *l_star_ptr += 0.5 * tau_ext.squaredNorm();
 
-  Vector3d dldy = Vector3d::Zero();
+  dldp_.setZero();
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < kNumRays; j++) {
       for (size_t k = 0; k < kNumRays; k++) {
-        dldy[i] += dldQ_(j, k) * Q_a3d_(j, k).derivatives()[i];
+        dldp_[i] += dldQ_(j, k) * Q_a3d_(j, k).derivatives()[i];
       }
     }
     for (size_t j = 0; j < kNumRays; j++) {
-      dldy[i] += dldb_[j] * b_a3d_[j].derivatives()[i];
+      dldp_[i] += dldb_[j] * b_a3d_[j].derivatives()[i];
     }
   }
 
   *f_L_ptr = vC_ * x_star_;
-  *dldy_ptr = dldy;
+  *dldy_ptr = dldp_;
   return true;
 }
 
