@@ -8,6 +8,7 @@ struct LocalMinimumSamplerConfig {
 
   std::vector<std::string> link_mesh_paths;
   std::vector<size_t> active_link_indices;
+  size_t num_links{0};
 
   // distance above the mesh, used for proximity queries.
   double epsilon{5e-4};

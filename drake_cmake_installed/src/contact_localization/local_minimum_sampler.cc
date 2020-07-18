@@ -14,14 +14,15 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
       LoadGradientCalculatorConfigFromYaml(file_path);
 
   YAML::Node config_yaml = YAML::LoadFile(file_path);
-
-  for (int i = 0; i < config_yaml["num_links"].as<int>(); i++) {
+  config.num_links = config_yaml["num_links"].as<size_t>();
+  for (int i = 0; i < config.num_links; i++) {
     config.link_mesh_paths.emplace_back(
         config_yaml["link_mesh_paths_prefix"].as<string>() + std::to_string(i) +
         config_yaml["link_mesh_paths_suffix"].as<string>());
   }
   config.active_link_indices =
       config_yaml["active_link_indices"].as<std::vector<size_t>>();
+
   config.epsilon = config_yaml["epsilon"].as<double>();
   config.line_search_steps_limit =
       config_yaml["line_search_steps_limit"].as<size_t>();
@@ -39,11 +40,7 @@ LocalMinimumSampler::LocalMinimumSampler(
     : config_(config) {
   calculator_ =
       std::make_unique<GradientCalculator>(config.gradient_calculator_config);
-  const int num_links = *(std::max_element(config.active_link_indices.begin(),
-                                           config.active_link_indices.end())) +
-                        1;
-
-  for (int i = 0; i < num_links; i++) {
+  for (int i = 0; i < config.num_links; i++) {
     p_queries_.push_back(nullptr);
   }
   for (const auto& i : config.active_link_indices) {
