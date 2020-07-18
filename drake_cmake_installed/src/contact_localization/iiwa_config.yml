@@ -1,0 +1,31 @@
+# gradient calculator config
+iiwa_sdf_path: "drake/manipulation/models/iiwa_description/iiwa7/iiwa7_no_collision.sdf"
+model_instance_name: "iiwa7"
+link_names:
+  - "iiwa_link_0"
+  - "iiwa_link_1"
+  - "iiwa_link_2"
+  - "iiwa_link_3"
+  - "iiwa_link_4"
+  - "iiwa_link_5"
+  - "iiwa_link_6"
+  - "iiwa_link_7"
+
+num_friction_cone_rays: 4
+friction_coefficient: 1.0
+
+# local minimum sampler config
+link_mesh_paths_prefix: "/Users/pangtao/PycharmProjects/contact_aware_control/contact_particle_filter/iiwa7_shifted_meshes/link_"
+link_mesh_paths_suffix: ".obj"
+num_links: 8
+active_link_indices:
+  - 5
+  - 6
+
+epsilon: 5.0e-4
+
+line_search_steps_limit: 10
+gradient_norm_convergence_threshold: 1.0e-3
+alpha: 0.4
+beta: 0.5
+max_step_size: 0.02

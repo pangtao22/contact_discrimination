@@ -8,26 +8,29 @@
 
 using AutoDiff3d = Eigen::AutoDiffScalar<Eigen::Vector3d>;
 
-const char kIiwaSdf[] =
-    "drake/manipulation/models/iiwa_description/iiwa7/"
-    "iiwa7_no_collision.sdf";
-
 const char kPlanarArmSdf[] =
     "/Users/pangtao/PycharmProjects/contact_aware_control/plan_runner/models/"
     "three_link_arm.sdf";
 
 constexpr size_t kNumPositions = 7;
 
-Eigen::MatrixXd CalcFrictionConeRays(
-    const Eigen::Ref<const Eigen::Vector3d>& normal, double mu, size_t nd);
+struct GradientCalculatorConfig {
+  std::string robot_sdf_path;
+  std::string model_name;
+  std::vector<std::string> link_names;
+
+  size_t num_rays{0};
+  double mu{0};
+};
+
+GradientCalculatorConfig LoadGradientCalculatorConfigFromYaml(
+    const std::string& file_path);
+
 
 class GradientCalculator {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GradientCalculator);
-  GradientCalculator(const std::string& robot_sdf_path,
-                     const std::string& model_name,
-                     const std::vector<std::string>& link_names,
-                     size_t num_rays);
+  GradientCalculator(const GradientCalculatorConfig& config);
   bool CalcDlDp(const Eigen::Ref<const Eigen::VectorXd>& q,
                 size_t contact_link_idx,
                 const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,

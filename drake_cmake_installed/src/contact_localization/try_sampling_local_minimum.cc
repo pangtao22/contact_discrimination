@@ -2,7 +2,6 @@
 #include <iostream>
 
 #include <drake/common/find_resource.h>
-#include <yaml-cpp/yaml.h>
 
 #include "local_minimum_sampler.h"
 
@@ -13,29 +12,12 @@ using std::cout;
 using std::endl;
 
 const char kIiwa7Config[] =
-    "/Users/pangtao/PycharmProjects/contact_aware_control"
-    "/contact_discrimination/config_iiwa7.yml";
-
+    "/Users/pangtao/drake-external-examples/drake_cmake_installed/"
+    "/src/contact_localization/iiwa_config.yml";
 
 int main() {
-  YAML::Node config = YAML::LoadFile(kIiwa7Config);
-
-  std::vector<std::string> active_link_mesh_paths;
-  for(int i = 0; i < 7; i++) {
-    active_link_mesh_paths.emplace_back(
-        "/Users/pangtao/PycharmProjects/contact_aware_control"
-        "/contact_particle_filter/iiwa7_shifted_meshes/link_" +
-        std::to_string(i) + ".obj");
-  }
-
   LocalMinimumSampler lm_sampler(
-      drake::FindResourceOrThrow(kIiwaSdf),
-      config["model_instance_name"].as<std::string>(),
-      config["link_names"].as<std::vector<std::string>>(),
-      active_link_mesh_paths,
-      {5, 6},
-      config["num_friction_cone_rays"].as<size_t>(),
-      5e-4);
+      LoadLocalMinimumSamplerConfigFromYaml(kIiwa7Config));
 
   const size_t nq = 7;
   VectorXd q(nq);
@@ -76,8 +58,8 @@ int main() {
         q, tau_ext, contact_link_idx, iteration_limit, &p_LQ_L_final,
         &normal_L_final, &f_W_final, &dlduv_norm_final, &l_star_final, false);
     if (is_successful) {
-      cout << i << ": " << l_star_final << " " << dlduv_norm_final << " " <<
-          p_LQ_L_final.transpose() << endl;
+      cout << i << ": " << l_star_final << " " << dlduv_norm_final << " "
+           << p_LQ_L_final.transpose() << endl;
       l_star_final_log.push_back(l_star_final);
       p_LQ_L_final_log.push_back(p_LQ_L_final);
     } else {

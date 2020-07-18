@@ -14,21 +14,16 @@ using std::cout;
 using std::endl;
 
 const char kIiwa7Config[] =
-    "/Users/pangtao/PycharmProjects/contact_aware_control"
-    "/contact_discrimination/config_iiwa7.yml";
+    "/Users/pangtao/drake-external-examples/drake_cmake_installed/"
+    "/src/contact_localization/iiwa_config.yml";
 
 const char kLink6MeshPath[] =
     "/Users/pangtao/PycharmProjects/contact_aware_control"
     "/contact_particle_filter/iiwa7_shifted_meshes/link_6.obj";
 
 int main() {
-  YAML::Node config = YAML::LoadFile(kIiwa7Config);
-
   GradientCalculator calculator(
-      drake::FindResourceOrThrow(kIiwaSdf),
-      config["model_instance_name"].as<std::string>(),
-      config["link_names"].as<std::vector<std::string>>(),
-      config["num_friction_cone_rays"].as<size_t>());
+    LoadGradientCalculatorConfigFromYaml(kIiwa7Config));
 
   const double epsilon = 5e-4;
   ProximityWrapper p_query(kLink6MeshPath, epsilon);

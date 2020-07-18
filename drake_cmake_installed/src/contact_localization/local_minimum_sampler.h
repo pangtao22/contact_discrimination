@@ -4,25 +4,30 @@
 #include "proximity_wrapper.h"
 
 struct LocalMinimumSamplerConfig {
-  std::string robot_sdf_path;
-  std::string model_name;
-  std::vector<std::string> link_names;
-  std::vector<std::string> link_mesh_paths;
-  std::vector<int> active_link_indices;
+  GradientCalculatorConfig gradient_calculator_config;
 
+  std::vector<std::string> link_mesh_paths;
+  std::vector<size_t> active_link_indices;
+
+  // distance above the mesh, used for proximity queries.
+  double epsilon{5e-4};
+
+  // Gradient descent parameters.
+  size_t line_search_steps_limit{10};
+  double gradient_norm_convergence_threshold{1e-3};
+  double alpha{0.4};
+  double beta{0.5};
+  double max_step_size{0.02};
 };
+
+LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
+    const std:: string& file_path);
 
 
 class LocalMinimumSampler {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(LocalMinimumSampler)
-  LocalMinimumSampler(const std::string &robot_sdf_path,
-                      const std::string &model_name,
-                      const std::vector<std::string> &link_names,
-                      const std::vector<std::string> &link_mesh_paths,
-                      const std::vector<int> &active_link_indices,
-                      int num_rays,
-                      double epsilon);
+  LocalMinimumSampler(const LocalMinimumSamplerConfig& config);
 
   bool RunGradientDescentFromPointOnMesh(
       const Eigen::Ref<const Eigen::VectorXd>& q,
@@ -33,7 +38,7 @@ class LocalMinimumSampler {
       const Eigen::Ref<const Eigen::VectorXd>& normal_L_initial,
       drake::EigenPtr<Eigen::Vector3d> p_LQ_L_final,
       drake::EigenPtr<Eigen::Vector3d> normal_L_final,
-      drake::EigenPtr<Eigen::Vector3d> f_W_final, double* dlduv_norm_final,
+      drake::EigenPtr<Eigen::Vector3d> f_L_final, double* dlduv_norm_final,
       double* l_star_final, bool is_logging) const;
 
   bool SampleLocalMinimum(const Eigen::Ref<const Eigen::VectorXd>& q,
@@ -54,8 +59,8 @@ class LocalMinimumSampler {
   std::vector<double> get_l_star_log() const { return log_l_star_; }
 
  private:
-  const double epsilon_;
-  const double gradient_norm_convergence_threshold_;
+  const LocalMinimumSamplerConfig config_;
+
   std::unique_ptr<GradientCalculator> calculator_;
   std::vector<std::unique_ptr<ProximityWrapper>> p_queries_;
 

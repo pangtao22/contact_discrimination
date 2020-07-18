@@ -2,9 +2,11 @@
 
 #include <cmath>
 
+#include <drake/common/find_resource.h>
 #include <drake/math/autodiff.h>
 #include <drake/math/autodiff_gradient.h>
 #include <drake/multibody/parsing/parser.h>
+#include <yaml-cpp/yaml.h>
 
 using drake::AutoDiffXd;
 using drake::MatrixX;
@@ -21,6 +23,22 @@ using Eigen::VectorXd;
 
 using std::cout;
 using std::endl;
+using std::string;
+
+GradientCalculatorConfig LoadGradientCalculatorConfigFromYaml(
+    const string& file_path) {
+  YAML::Node config_yaml = YAML::LoadFile(file_path);
+
+  GradientCalculatorConfig config;
+  config.robot_sdf_path =
+      drake::FindResourceOrThrow(config_yaml["iiwa_sdf_path"].as<string>());
+  config.model_name = config_yaml["model_instance_name"].as<string>();
+  config.link_names = config_yaml["link_names"].as<std::vector<string>>();
+
+  config.num_rays = config_yaml["num_friction_cone_rays"].as<size_t>();
+  config.mu = config_yaml["friction_coefficient"].as<double>();
+  return config;
+}
 
 template <class T>
 inline Matrix<T, 3, 3> skew_symmetric(
@@ -37,25 +55,23 @@ inline Matrix<T, 3, 3> skew_symmetric(
   return Sp;
 }
 
-GradientCalculator::GradientCalculator(
-    const std::string& robot_sdf_path, const std::string& model_name,
-    const std::vector<std::string>& link_names, size_t num_rays)
-    : num_rays_(num_rays),
-      mu_(1.),
-      qp_solver_(std::make_unique<OsqpWrapper>(num_rays)),
+GradientCalculator::GradientCalculator(const GradientCalculatorConfig& config)
+    : num_rays_(config.num_rays),
+      mu_(config.mu),
+      qp_solver_(std::make_unique<OsqpWrapper>(num_rays_)),
       plant_(std::make_unique<MultibodyPlant<double>>(1e-3)) {
-  DRAKE_THROW_UNLESS(num_rays == kNumRays);
+  DRAKE_THROW_UNLESS(num_rays_ == kNumRays);
 
   drake::multibody::Parser parser(plant_.get());
-  parser.AddModelFromFile(robot_sdf_path);
+  parser.AddModelFromFile(config.robot_sdf_path);
   plant_->WeldFrames(plant_->world_frame(),
-                     plant_->GetFrameByName(link_names[0]));
+                     plant_->GetFrameByName(config.link_names[0]));
   plant_->mutable_gravity_field().set_gravity_vector({0, 0, 0});
   plant_->Finalize();
   DRAKE_THROW_UNLESS(plant_->num_positions() == kNumPositions);
 
-  robot_model_ = plant_->GetModelInstanceByName(model_name);
-  for (const auto& name : link_names) {
+  robot_model_ = plant_->GetModelInstanceByName(config.model_name);
+  for (const auto& name : config.link_names) {
     frame_indices_.emplace_back(plant_->GetFrameByName(name).index());
   }
   plant_context_ = plant_->CreateDefaultContext();
