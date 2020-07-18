@@ -16,8 +16,7 @@ const char kIiwa7Config[] =
     "/src/contact_localization/iiwa_config.yml";
 
 int main() {
-  LocalMinimumSampler lm_sampler(
-      LoadLocalMinimumSamplerConfigFromYaml(kIiwa7Config));
+  LocalMinimumSampler lm_sampler(kIiwa7Config);
 
   const size_t nq = 7;
   VectorXd q(nq);
@@ -28,7 +27,7 @@ int main() {
       0.;
   const size_t contact_link_idx = 5;
 
-  const size_t iteration_limit = 50;
+  lm_sampler.UpdateJacobians(q);
   Vector3d p_LQ_L_final;
   Vector3d normal_L_final;
   Vector3d f_W_final;
@@ -55,7 +54,7 @@ int main() {
   for (int i = 0; i < 100; i++) {
     dlduv_norm_final = 1e6;
     bool is_successful = lm_sampler.SampleLocalMinimum(
-        q, tau_ext, contact_link_idx, iteration_limit, &p_LQ_L_final,
+        q, tau_ext, contact_link_idx, &p_LQ_L_final,
         &normal_L_final, &f_W_final, &dlduv_norm_final, &l_star_final, false);
     if (is_successful) {
       cout << i << ": " << l_star_final << " " << dlduv_norm_final << " "

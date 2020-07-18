@@ -14,7 +14,7 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
       LoadGradientCalculatorConfigFromYaml(file_path);
 
   YAML::Node config_yaml = YAML::LoadFile(file_path);
-  config.num_links = config_yaml["num_links"].as<size_t>();
+  config.num_links = config.gradient_calculator_config.link_names.size();
   for (int i = 0; i < config.num_links; i++) {
     config.link_mesh_paths.emplace_back(
         config_yaml["link_mesh_paths_prefix"].as<string>() + std::to_string(i) +
@@ -24,6 +24,8 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
       config_yaml["active_link_indices"].as<std::vector<size_t>>();
 
   config.epsilon = config_yaml["epsilon"].as<double>();
+
+  config.iterations_limit = config_yaml["iterations_limit"].as<size_t>();
   config.line_search_steps_limit =
       config_yaml["line_search_steps_limit"].as<size_t>();
   config.gradient_norm_convergence_threshold =
@@ -49,10 +51,13 @@ LocalMinimumSampler::LocalMinimumSampler(
   }
 }
 
+LocalMinimumSampler::LocalMinimumSampler(const string& config_file_path)
+    : LocalMinimumSampler(
+          LoadLocalMinimumSamplerConfigFromYaml(config_file_path)) {}
+
 bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
-    const Eigen::Ref<const Eigen::VectorXd>& q,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-    const size_t contact_link_idx, const size_t iteration_limit,
+    const size_t contact_link_idx,
     const Eigen::Ref<const Eigen::VectorXd>& p_LQ_L_initial,
     const Eigen::Ref<const Eigen::VectorXd>& normal_L_initial,
     drake::EigenPtr<Vector3d> p_LQ_L_final,
@@ -75,8 +80,8 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
 
   bool is_stuck = false;
 
-  while (iter_count < iteration_limit) {
-    if (!calculator_->CalcDlDp(q, contact_link_idx, p_LQ_L, -normal_L, tau_ext,
+  while (iter_count < config_.iterations_limit) {
+    if (!calculator_->CalcDlDp(contact_link_idx, p_LQ_L, -normal_L, tau_ext,
                                &dldp, &f_L, &l_star)) {
       return false;
     }
@@ -99,7 +104,7 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     size_t line_search_steps = 0;
     double l_star_ls;
     while (true) {
-      if (!calculator_->CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv,
+      if (!calculator_->CalcContactQp(contact_link_idx, p_LQ_L - t * dlduv,
                                       -normal_L, tau_ext, &f_L, &l_star_ls)) {
         return false;
       }
@@ -146,7 +151,7 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
 bool LocalMinimumSampler::SampleLocalMinimum(
     const Eigen::Ref<const Eigen::VectorXd>& q,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-    const size_t contact_link_idx, const size_t iteration_limit,
+    const size_t contact_link_idx,
     drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
@@ -159,9 +164,9 @@ bool LocalMinimumSampler::SampleLocalMinimum(
                                                              &triangle_idx);
   normal_L =
       p_queries_[contact_link_idx]->get_mesh().CalcFaceNormal(triangle_idx);
-
+  UpdateJacobians(q);
   return RunGradientDescentFromPointOnMesh(
-      q, tau_ext, contact_link_idx, iteration_limit, p_LQ_L, normal_L,
+      tau_ext, contact_link_idx, p_LQ_L, normal_L,
       p_LQ_L_final, normal_L_final, f_W_final, dlduv_norm_final, l_star_final,
       is_logging);
 }

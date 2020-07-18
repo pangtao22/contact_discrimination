@@ -31,24 +31,24 @@ class GradientCalculator {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GradientCalculator);
   GradientCalculator(const GradientCalculatorConfig& config);
-  bool CalcDlDp(const Eigen::Ref<const Eigen::VectorXd>& q,
-                size_t contact_link_idx,
+  void UpdateJacobians(
+      const Eigen::Ref<const Eigen::VectorXd>& q,
+      const std::vector<size_t>& active_link_indices) const;
+  bool CalcDlDp(size_t contact_link_idx,
                 const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
                 const Eigen::Ref<const Eigen::Vector3d>& normal_L,
                 const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
                 drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
                 drake::EigenPtr<Eigen::Vector3d> f_L_ptr,
                 double* l_star_ptr) const;
-  bool CalcDlDpAutoDiff(const Eigen::Ref<const Eigen::VectorXd>& q,
-                        size_t contact_link_idx,
+  bool CalcDlDpAutoDiff(size_t contact_link_idx,
                         const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
                         const Eigen::Ref<const Eigen::Vector3d>& normal_L,
                         const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
                         drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
                         drake::EigenPtr<Eigen::Vector3d> f_L_ptr,
                         double* l_star_ptr) const;
-  bool CalcContactQp(const Eigen::Ref<const Eigen::VectorXd>& q,
-                     size_t contact_link_idx,
+  bool CalcContactQp(size_t contact_link_idx,
                      const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
                      const Eigen::Ref<const Eigen::Vector3d>& normal_L,
                      const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
@@ -56,9 +56,6 @@ class GradientCalculator {
                      double* l_star) const;
 
  private:
-  void UpdateKinematics(
-      const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
-      const Eigen::Ref<const Eigen::Vector3d>& normal_L) const;
   void CalcFrictionConeRays(const Eigen::Ref<const Eigen::Vector3d>& normal,
                             double mu) const;
   double dQdJv(int i, int j, int k, int l) const;
@@ -76,7 +73,7 @@ class GradientCalculator {
 
   // UpdateKinematics
   mutable std::unique_ptr<drake::systems::Context<double>> plant_context_;
-  mutable Eigen::Matrix<double, 6, kNumPositions> J_L_;
+  mutable std::vector<Eigen::Matrix<double, 6, kNumPositions>> J_L_;
   mutable Eigen::Matrix<double, 3, kNumRays> vC_;
 
   // Sovling QP and its gradient

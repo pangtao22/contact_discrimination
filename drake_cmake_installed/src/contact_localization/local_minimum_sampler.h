@@ -14,6 +14,7 @@ struct LocalMinimumSamplerConfig {
   double epsilon{5e-4};
 
   // Gradient descent parameters.
+  size_t iterations_limit{0};
   size_t line_search_steps_limit{10};
   double gradient_norm_convergence_threshold{1e-3};
   double alpha{0.4};
@@ -29,12 +30,15 @@ class LocalMinimumSampler {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(LocalMinimumSampler)
   LocalMinimumSampler(const LocalMinimumSamplerConfig& config);
+  LocalMinimumSampler(const std::string& config_file_path);
+
+  void UpdateJacobians(const Eigen::Ref<const Eigen::VectorXd>& q) const {
+    calculator_->UpdateJacobians(q, config_.active_link_indices);
+  }
 
   bool RunGradientDescentFromPointOnMesh(
-      const Eigen::Ref<const Eigen::VectorXd>& q,
       const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
       const size_t contact_link_idx,
-      const size_t iteration_limit,
       const Eigen::Ref<const Eigen::VectorXd>& p_LQ_L_initial,
       const Eigen::Ref<const Eigen::VectorXd>& normal_L_initial,
       drake::EigenPtr<Eigen::Vector3d> p_LQ_L_final,
@@ -42,10 +46,11 @@ class LocalMinimumSampler {
       drake::EigenPtr<Eigen::Vector3d> f_L_final, double* dlduv_norm_final,
       double* l_star_final, bool is_logging) const;
 
+
+
   bool SampleLocalMinimum(const Eigen::Ref<const Eigen::VectorXd>& q,
                           const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
                           const size_t contact_link_idx,
-                          const size_t iteration_limit,
                           drake::EigenPtr<Eigen::Vector3d> p_LQ_L_final,
                           drake::EigenPtr<Eigen::Vector3d> normal_L_final,
                           drake::EigenPtr<Eigen::Vector3d> f_W_final,

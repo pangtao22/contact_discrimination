@@ -75,6 +75,11 @@ GradientCalculator::GradientCalculator(const GradientCalculatorConfig& config)
     frame_indices_.emplace_back(plant_->GetFrameByName(name).index());
   }
   plant_context_ = plant_->CreateDefaultContext();
+
+  size_t num_links = config.link_names.size();
+  for (int i = 0; i < num_links; i++) {
+    J_L_.emplace_back(Matrix<double, 6, kNumPositions>::Constant(NAN));
+  }
 }
 
 void GradientCalculator::CalcFrictionConeRays(
@@ -132,26 +137,28 @@ double GradientCalculator::dQdJv(int i, int j, int k, int l) const {
   return 0;
 }
 
-void GradientCalculator::UpdateKinematics(
-    const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
-    const Eigen::Ref<const Eigen::Vector3d>& normal_L) const {
-  CalcFrictionConeRays(normal_L, mu_);
+void GradientCalculator::UpdateJacobians(
+    const Eigen::Ref<const Eigen::VectorXd>& q,
+    const std::vector<size_t>& active_link_indices) const {
   plant_->SetPositions(plant_context_.get(), q);
-  const auto& contact_frame_idx = frame_indices_[contact_link_idx];
-  plant_->CalcJacobianSpatialVelocity(
-      *plant_context_, drake::multibody::JacobianWrtVariable::kQDot,
-      plant_->get_frame(contact_frame_idx), Vector3d::Zero(),
-      plant_->world_frame(), plant_->get_frame(contact_frame_idx), &J_L_);
+
+  for (const auto& link_idx : active_link_indices) {
+    const auto& contact_frame_idx = frame_indices_[link_idx];
+    plant_->CalcJacobianSpatialVelocity(
+        *plant_context_, drake::multibody::JacobianWrtVariable::kQDot,
+        plant_->get_frame(contact_frame_idx), Vector3d::Zero(),
+        plant_->world_frame(), plant_->get_frame(contact_frame_idx),
+        &(J_L_[link_idx]));
+  }
 }
 
 bool GradientCalculator::CalcDlDpAutoDiff(
-    const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
-    const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+    size_t contact_link_idx, const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
     drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
     drake::EigenPtr<Eigen::Vector3d> f_L_ptr, double* l_star_ptr) const {
-  UpdateKinematics(q, contact_link_idx, normal_L);
+  CalcFrictionConeRays(normal_L, mu_);
 
   Matrix<AutoDiff3d, 3, 1> p_LQ_L_a3d;
   for (int i = 0; i < 3; i++) {
@@ -163,7 +170,8 @@ bool GradientCalculator::CalcDlDpAutoDiff(
   auto Sp_a3d = skew_symmetric<AutoDiff3d>(p_LQ_L_a3d);
 
   // CalcJ
-  J_a3d_ = vC_.transpose() * (-Sp_a3d * J_L_.topRows(3) + J_L_.bottomRows(3));
+  J_a3d_ = vC_.transpose() * (-Sp_a3d * J_L_[contact_link_idx].topRows(3) +
+                              J_L_[contact_link_idx].bottomRows(3));
   Q_a3d_ = J_a3d_ * J_a3d_.transpose();  // CalcQ
   b_a3d_ = -J_a3d_ * tau_ext;            // Calcb
 
@@ -199,15 +207,16 @@ bool GradientCalculator::CalcDlDpAutoDiff(
 }
 
 bool GradientCalculator::CalcDlDp(
-    const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
-    const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+    size_t contact_link_idx, const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
     drake::EigenPtr<Eigen::Vector3d> dldy_ptr,
     drake::EigenPtr<Eigen::Vector3d> f_L_ptr, double* l_star_ptr) const {
-  UpdateKinematics(q, contact_link_idx, normal_L);
+  CalcFrictionConeRays(normal_L, mu_);
+
   J_ = vC_.transpose() *
-       (-skew_symmetric<double>(p_LQ_L) * J_L_.topRows(3) + J_L_.bottomRows(3));
+       (-skew_symmetric<double>(p_LQ_L) * J_L_[contact_link_idx].topRows(3) +
+        J_L_[contact_link_idx].bottomRows(3));
   Q_ = J_ * J_.transpose();  // CalcQ
   b_ = -J_ * tau_ext;        // Calcb
 
@@ -230,7 +239,7 @@ bool GradientCalculator::CalcDlDp(
   }
 
   dldJ_ += -dldb_ * tau_ext.transpose();
-  dldE_ = dldJ_ * J_L_.topRows(3).transpose();
+  dldE_ = dldJ_ * J_L_[contact_link_idx].topRows(3).transpose();
   dldSp_ = -vC_ * dldE_;
   dldp_[0] = dldSp_(2, 1) - dldSp_(1, 2);
   dldp_[1] = dldSp_(0, 2) - dldSp_(2, 0);
@@ -242,14 +251,14 @@ bool GradientCalculator::CalcDlDp(
 }
 
 bool GradientCalculator::CalcContactQp(
-    const Eigen::Ref<const Eigen::VectorXd>& q, size_t contact_link_idx,
+    size_t contact_link_idx,
     const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
     drake::EigenPtr<Eigen::Vector3d> f_L, double* l_star) const {
-  UpdateKinematics(q, contact_link_idx, normal_L);
+  CalcFrictionConeRays(normal_L, mu_);
   J_ = vC_.transpose() *
-       (-skew_symmetric<double>(p_LQ_L) * J_L_.topRows(3) + J_L_.bottomRows(3));
+       (-skew_symmetric<double>(p_LQ_L) * J_L_[contact_link_idx].topRows(3) + J_L_[contact_link_idx].bottomRows(3));
   Q_ = J_ * J_.transpose();  // CalcQ
   b_ = -J_ * tau_ext;        // Calcb
 

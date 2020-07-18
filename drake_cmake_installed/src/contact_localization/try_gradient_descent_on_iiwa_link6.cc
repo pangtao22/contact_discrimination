@@ -54,10 +54,10 @@ int main() {
   std::vector<Vector3d> log_normals_L = {normal_L};
   std::vector<Vector3d> log_points_L = {p_LQ_L};
 
+  calculator.UpdateJacobians(q, {5, 6});
   while (iter_count < 30) {
     auto start = std::chrono::high_resolution_clock::now();
-    calculator.CalcDlDp(q,
-                        contact_link_idx,
+    calculator.CalcDlDp(contact_link_idx,
                         p_LQ_L,
                         -normal_L,
                         tau_ext,
@@ -75,8 +75,7 @@ int main() {
     cout << "l_star: " << l_star << endl;
     cout << "Gradient time: " << duration.count() << endl;
 
-    calculator.CalcDlDpAutoDiff(q,
-                                contact_link_idx,
+    calculator.CalcDlDpAutoDiff(contact_link_idx,
                                 p_LQ_L,
                                 -normal_L,
                                 tau_ext,
@@ -98,7 +97,7 @@ int main() {
     double l_star_ls;  // line search
 
     while (true) {
-      calculator.CalcContactQp(q, contact_link_idx, p_LQ_L - t * dlduv, -normal_L,
+      calculator.CalcContactQp(contact_link_idx, p_LQ_L - t * dlduv, -normal_L,
                                tau_ext, &f_L, &l_star_ls);
       if(l_star_ls < l_star - alpha * t * dlduv.squaredNorm()) {
         break;
