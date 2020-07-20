@@ -1,11 +1,35 @@
 #include "local_minimum_sampler.h"
 
+#include <fstream>
+#include <iostream>
+
 #include <yaml-cpp/yaml.h>
 
 using Eigen::Vector3d;
 using std::cout;
 using std::endl;
 using std::string;
+
+template <class M>
+M LoadCsv(const std::string& path) {
+  std::ifstream indata(path);
+  std::string line;
+  std::vector<double> values;
+  uint rows = 0;
+  while (std::getline(indata, line)) {
+    std::stringstream lineStream(line);
+    std::string cell;
+    while (std::getline(lineStream, cell, ',')) {
+      values.push_back(std::stod(cell));
+    }
+    ++rows;
+  }
+
+  return Eigen::Map<
+      const Eigen::Matrix<typename M::Scalar, M::RowsAtCompileTime,
+                          M::ColsAtCompileTime, Eigen::RowMajor>>(
+      values.data(), rows, values.size() / rows);
+}
 
 LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
     const std::string& file_path) {
@@ -22,9 +46,17 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
   }
   config.active_link_indices =
       config_yaml["active_link_indices"].as<std::vector<size_t>>();
+  config.num_samples_per_link =
+      config_yaml["num_samples_per_link"].as<size_t>();
 
   config.epsilon = config_yaml["epsilon"].as<double>();
 
+  // Rejection sampling
+  const double std = config_yaml["standard_deviation"].as<double>();
+  config.optimal_cost_threshold =
+      -std * std * std::log(config_yaml["likelihood_threhold"].as<double>());
+
+  // Gradient descent parameters.
   config.iterations_limit = config_yaml["iterations_limit"].as<size_t>();
   config.line_search_steps_limit =
       config_yaml["line_search_steps_limit"].as<size_t>();
@@ -34,6 +66,12 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
   config.beta = config_yaml["beta"].as<double>();
   config.max_step_size = config_yaml["max_step_size"].as<double>();
 
+  // Samples and normals
+  config.points_L_paths =
+      config_yaml["points_L_paths"].as<std::vector<string>>();
+  config.outward_normals_L_paths =
+      config_yaml["normals_L_paths"].as<std::vector<string>>();
+
   return config;
 }
 
@@ -42,12 +80,72 @@ LocalMinimumSampler::LocalMinimumSampler(
     : config_(config) {
   calculator_ =
       std::make_unique<GradientCalculator>(config.gradient_calculator_config);
+
   for (int i = 0; i < config.num_links; i++) {
     p_queries_.push_back(nullptr);
+    samples_L_.emplace_back(Eigen::Matrix3Xd::Constant(3, 1, NAN));
+    normals_L_.emplace_back(Eigen::Matrix3Xd::Constant(3, 1, NAN));
+    samples_optimal_cost_.emplace_back(Eigen::VectorXd::Constant(1, NAN));
+    small_cost_indices_.emplace_back(std::vector<size_t>());
   }
-  for (const auto& i : config.active_link_indices) {
-    p_queries_[i] = std::make_unique<ProximityWrapper>(
-        config.link_mesh_paths[i], config.epsilon);
+
+  for (const auto& link_idx : config.active_link_indices) {
+    // Initialize proximity query.
+    p_queries_[link_idx] = std::make_unique<ProximityWrapper>(
+        config.link_mesh_paths[link_idx], config.epsilon);
+
+    // Sample points on mesh.
+    Vector3d point_L;
+    size_t triangle_idx;
+    samples_L_[link_idx].resize(3, config_.num_samples_per_link);
+    normals_L_[link_idx].resize(3, config_.num_samples_per_link);
+    for (size_t i = 0; i < config_.num_samples_per_link; i++) {
+      p_queries_[link_idx]->get_mesh().SamplePointOnMesh(&point_L,
+                                                         &triangle_idx);
+      samples_L_[link_idx].col(i) = point_L;
+      normals_L_[link_idx].col(i) =
+          p_queries_[link_idx]->get_mesh().CalcFaceNormal(triangle_idx);
+    }
+    //  Load samples and normals from files.
+    //    samples_L_[link_idx] =
+    //        LoadCsv<Eigen::MatrixXd>(config_.points_L_paths[link_idx]).transpose();
+    //    normals_L_[link_idx] =
+    //        LoadCsv<Eigen::MatrixXd>(config_.outward_normals_L_paths[link_idx])
+    //            .transpose();
+    //
+    //    DRAKE_THROW_UNLESS(samples_L_[link_idx].cols() ==
+    //                       config_.num_samples_per_link);
+    //    DRAKE_THROW_UNLESS(normals_L_[link_idx].cols() ==
+    //                       config_.num_samples_per_link);
+
+    // Initialize data for rejection sampling.
+    samples_optimal_cost_[link_idx].resize(config_.num_samples_per_link);
+  }
+}
+
+void LocalMinimumSampler::ComputeOptimalCostForSamples(
+    const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const {
+  small_cost_indices_.clear();
+
+  double l_star;
+  Vector3d f_L;
+  for (const auto& link_idx : config_.active_link_indices) {
+    for (size_t i = 0; i < config_.num_samples_per_link; i++) {
+      calculator_->CalcContactQp(link_idx, samples_L_[link_idx].col(i),
+                                 -normals_L_[link_idx].col(i), tau_ext, &f_L,
+                                 &l_star);
+      samples_optimal_cost_[link_idx][i] = l_star;
+
+      if (l_star <= config_.optimal_cost_threshold) {
+        small_cost_indices_[link_idx].push_back(i);
+      }
+    }
+  }
+  
+  cout << "cost threshold: " << config_.optimal_cost_threshold << endl;
+  for (const auto& link_idx : config_.active_link_indices) {
+    cout << "num small cost samples for link " << link_idx << " "
+         << small_cost_indices_[link_idx].size() << endl;
   }
 }
 
@@ -151,8 +249,7 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
 bool LocalMinimumSampler::SampleLocalMinimum(
     const Eigen::Ref<const Eigen::VectorXd>& q,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
-    const size_t contact_link_idx,
-    drake::EigenPtr<Vector3d> p_LQ_L_final,
+    const size_t contact_link_idx, drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
     double* l_star_final, bool is_logging) const {
@@ -166,7 +263,6 @@ bool LocalMinimumSampler::SampleLocalMinimum(
       p_queries_[contact_link_idx]->get_mesh().CalcFaceNormal(triangle_idx);
   UpdateJacobians(q);
   return RunGradientDescentFromPointOnMesh(
-      tau_ext, contact_link_idx, p_LQ_L, normal_L,
-      p_LQ_L_final, normal_L_final, f_W_final, dlduv_norm_final, l_star_final,
-      is_logging);
+      tau_ext, contact_link_idx, p_LQ_L, normal_L, p_LQ_L_final, normal_L_final,
+      f_W_final, dlduv_norm_final, l_star_final, is_logging);
 }

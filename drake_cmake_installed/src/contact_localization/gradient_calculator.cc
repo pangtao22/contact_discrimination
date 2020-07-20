@@ -251,14 +251,14 @@ bool GradientCalculator::CalcDlDp(
 }
 
 bool GradientCalculator::CalcContactQp(
-    size_t contact_link_idx,
-    const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
+    size_t contact_link_idx, const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L,
     const Eigen::Ref<const Eigen::Vector3d>& normal_L,
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
     drake::EigenPtr<Eigen::Vector3d> f_L, double* l_star) const {
   CalcFrictionConeRays(normal_L, mu_);
   J_ = vC_.transpose() *
-       (-skew_symmetric<double>(p_LQ_L) * J_L_[contact_link_idx].topRows(3) + J_L_[contact_link_idx].bottomRows(3));
+       (-skew_symmetric<double>(p_LQ_L) * J_L_[contact_link_idx].topRows(3) +
+        J_L_[contact_link_idx].bottomRows(3));
   Q_ = J_ * J_.transpose();  // CalcQ
   b_ = -J_ * tau_ext;        // Calcb
 
@@ -267,5 +267,6 @@ bool GradientCalculator::CalcContactQp(
     *l_star += 0.5 * tau_ext.squaredNorm();
     return true;
   }
+  *l_star = std::numeric_limits<double>::infinity();
   return false;
 }

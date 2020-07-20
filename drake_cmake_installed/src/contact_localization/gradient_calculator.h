@@ -30,7 +30,7 @@ GradientCalculatorConfig LoadGradientCalculatorConfigFromYaml(
 class GradientCalculator {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(GradientCalculator);
-  GradientCalculator(const GradientCalculatorConfig& config);
+  explicit GradientCalculator(const GradientCalculatorConfig& config);
   void UpdateJacobians(
       const Eigen::Ref<const Eigen::VectorXd>& q,
       const std::vector<size_t>& active_link_indices) const;

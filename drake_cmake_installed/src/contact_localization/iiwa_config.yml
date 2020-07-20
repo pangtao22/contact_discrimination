@@ -20,12 +20,40 @@ link_mesh_paths_suffix: ".obj"
 active_link_indices:
   - 5
   - 6
+num_samples_per_link: 1000
 
+# for proximity queries
 epsilon: 5.0e-4
 
+# Rejection sampling
+standard_deviation: 0.1
+likelihood_threhold: 0.4
+
+# gradient descent
 iterations_limit: 50
 line_search_steps_limit: 10
 gradient_norm_convergence_threshold: 1.0e-3
 alpha: 0.4
 beta: 0.5
 max_step_size: 0.02
+
+# Sample points and normals path
+points_L_paths:
+  - ""
+  - ""
+  - ""
+  - ""
+  - ""
+  - "/Users/pangtao/PycharmProjects/contact_aware_control/contact_discrimination/link_5_points.txt"
+  - "/Users/pangtao/PycharmProjects/contact_aware_control/contact_discrimination/link_6_points.txt"
+  - ""
+
+normals_L_paths:
+  - ""
+  - ""
+  - ""
+  - ""
+  - ""
+  - "/Users/pangtao/PycharmProjects/contact_aware_control/contact_discrimination/link_5_outward_normals.txt"
+  - "/Users/pangtao/PycharmProjects/contact_aware_control/contact_discrimination/link_6_outward_normals.txt"
+  - ""

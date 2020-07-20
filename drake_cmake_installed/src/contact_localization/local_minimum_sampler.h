@@ -9,9 +9,12 @@ struct LocalMinimumSamplerConfig {
   std::vector<std::string> link_mesh_paths;
   std::vector<size_t> active_link_indices;
   size_t num_links{0};
-
+  size_t num_samples_per_link{0};
   // distance above the mesh, used for proximity queries.
   double epsilon{5e-4};
+
+  // Rejection sampling
+  double optimal_cost_threshold;
 
   // Gradient descent parameters.
   size_t iterations_limit{0};
@@ -20,6 +23,10 @@ struct LocalMinimumSamplerConfig {
   double alpha{0.4};
   double beta{0.5};
   double max_step_size{0.02};
+
+  // Samples and normals
+  std::vector<std::string> points_L_paths;
+  std::vector<std::string> outward_normals_L_paths;
 };
 
 LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
@@ -29,12 +36,15 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
 class LocalMinimumSampler {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(LocalMinimumSampler)
-  LocalMinimumSampler(const LocalMinimumSamplerConfig& config);
-  LocalMinimumSampler(const std::string& config_file_path);
+  explicit LocalMinimumSampler(const LocalMinimumSamplerConfig& config);
+  explicit LocalMinimumSampler(const std::string& config_file_path);
 
   void UpdateJacobians(const Eigen::Ref<const Eigen::VectorXd>& q) const {
     calculator_->UpdateJacobians(q, config_.active_link_indices);
   }
+
+  void ComputeOptimalCostForSamples(
+      const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const;
 
   bool RunGradientDescentFromPointOnMesh(
       const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
@@ -45,8 +55,6 @@ class LocalMinimumSampler {
       drake::EigenPtr<Eigen::Vector3d> normal_L_final,
       drake::EigenPtr<Eigen::Vector3d> f_L_final, double* dlduv_norm_final,
       double* l_star_final, bool is_logging) const;
-
-
 
   bool SampleLocalMinimum(const Eigen::Ref<const Eigen::VectorXd>& q,
                           const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
@@ -66,10 +74,16 @@ class LocalMinimumSampler {
 
  private:
   const LocalMinimumSamplerConfig config_;
-
   std::unique_ptr<GradientCalculator> calculator_;
   std::vector<std::unique_ptr<ProximityWrapper>> p_queries_;
+  std::vector<Eigen::Matrix3Xd> samples_L_;
+  std::vector<Eigen::Matrix3Xd> normals_L_;
 
+  // Rejection sampling.
+  mutable std::vector<Eigen::VectorXd> samples_optimal_cost_;
+  mutable std::vector<std::vector<size_t>> small_cost_indices_;
+
+  // Logging.
   mutable std::vector<Eigen::Vector3d> log_points_L_;
   mutable std::vector<Eigen::Vector3d> log_normals_L_;
   mutable std::vector<double> log_dlduv_norm_;
