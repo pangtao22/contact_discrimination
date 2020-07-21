@@ -1,5 +1,8 @@
 #pragma once
 
+#include <drake/lcmt_contact_discrimination.hpp>
+#include <lcm/lcm-cpp.hpp>
+
 #include "gradient_calculator.h"
 #include "proximity_wrapper.h"
 
@@ -25,13 +28,13 @@ struct LocalMinimumSamplerConfig {
   double max_step_size{0.02};
 
   // Samples and normals
+  bool load_samples_from_files;
   std::vector<std::string> points_L_paths;
   std::vector<std::string> outward_normals_L_paths;
 };
 
 LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
-    const std:: string& file_path);
-
+    const std::string& file_path);
 
 class LocalMinimumSampler {
  public:
@@ -42,15 +45,16 @@ class LocalMinimumSampler {
   void UpdateJacobians(const Eigen::Ref<const Eigen::VectorXd>& q) const {
     calculator_->UpdateJacobians(q, config_.active_link_indices);
   }
-
   void ComputeOptimalCostForSamples(
+      const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const;
+  void RunGradientDescentOnSmallCostSamples(
       const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const;
 
   bool RunGradientDescentFromPointOnMesh(
       const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
       const size_t contact_link_idx,
-      const Eigen::Ref<const Eigen::VectorXd>& p_LQ_L_initial,
-      const Eigen::Ref<const Eigen::VectorXd>& normal_L_initial,
+      const Eigen::Ref<const Eigen::Vector3d>& p_LQ_L_initial,
+      const Eigen::Ref<const Eigen::Vector3d>& normal_L_initial,
       drake::EigenPtr<Eigen::Vector3d> p_LQ_L_final,
       drake::EigenPtr<Eigen::Vector3d> normal_L_final,
       drake::EigenPtr<Eigen::Vector3d> f_L_final, double* dlduv_norm_final,
@@ -65,6 +69,11 @@ class LocalMinimumSampler {
                           double* dlduv_norm_final, double* l_star_final,
                           bool is_logging) const;
 
+  void InitializeContactDiscriminationMsg() const;
+  void PublishGradientDescentResults() const;
+  int get_max_num_small_cost_samples() const;
+  int get_max_num_converged_samples() const;
+
   std::vector<Eigen::Vector3d> get_points_log() const { return log_points_L_; }
   std::vector<Eigen::Vector3d> get_normals_log() const {
     return log_normals_L_;
@@ -73,15 +82,25 @@ class LocalMinimumSampler {
   std::vector<double> get_l_star_log() const { return log_l_star_; }
 
  private:
+  void GenerateSamples();
+
   const LocalMinimumSamplerConfig config_;
   std::unique_ptr<GradientCalculator> calculator_;
   std::vector<std::unique_ptr<ProximityWrapper>> p_queries_;
+  std::unique_ptr<lcm::LCM> lcm_;
   std::vector<Eigen::Matrix3Xd> samples_L_;
   std::vector<Eigen::Matrix3Xd> normals_L_;
+
+  mutable drake::lcmt_contact_discrimination msg_;
 
   // Rejection sampling.
   mutable std::vector<Eigen::VectorXd> samples_optimal_cost_;
   mutable std::vector<std::vector<size_t>> small_cost_indices_;
+
+  // Converged samples from rejection sampling.
+  mutable std::vector<std::vector<Eigen::Vector3d>> converged_samples_L_;
+  mutable std::vector<std::vector<Eigen::Vector3d>>
+      converged_samples_normals_L_;
 
   // Logging.
   mutable std::vector<Eigen::Vector3d> log_points_L_;

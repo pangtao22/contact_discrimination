@@ -23,7 +23,7 @@ const char kLink6MeshPath[] =
 
 int main() {
   GradientCalculator calculator(
-    LoadGradientCalculatorConfigFromYaml(kIiwa7Config));
+      LoadGradientCalculatorConfigFromYaml(kIiwa7Config));
 
   const double epsilon = 5e-4;
   ProximityWrapper p_query(kLink6MeshPath, epsilon);
@@ -57,13 +57,8 @@ int main() {
   calculator.UpdateJacobians(q, {5, 6});
   while (iter_count < 30) {
     auto start = std::chrono::high_resolution_clock::now();
-    calculator.CalcDlDp(contact_link_idx,
-                        p_LQ_L,
-                        -normal_L,
-                        tau_ext,
-                        &dldp,
-                        &f_L,
-                        &l_star);
+    calculator.CalcDlDp(contact_link_idx, p_LQ_L, -normal_L, tau_ext, &dldp,
+                        &f_L, &l_star);
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = duration_cast<std::chrono::microseconds>(end - start);
 
@@ -75,13 +70,8 @@ int main() {
     cout << "l_star: " << l_star << endl;
     cout << "Gradient time: " << duration.count() << endl;
 
-    calculator.CalcDlDpAutoDiff(contact_link_idx,
-                                p_LQ_L,
-                                -normal_L,
-                                tau_ext,
-                                &dldp,
-                                &f_L,
-                                &l_star);
+    calculator.CalcDlDpAutoDiff(contact_link_idx, p_LQ_L, -normal_L, tau_ext,
+                                &dldp, &f_L, &l_star);
     cout << "dldp_autodiff: " << dldp.transpose() << endl;
 
     if (dlduv.norm() < 1e-3) {
@@ -99,7 +89,7 @@ int main() {
     while (true) {
       calculator.CalcContactQp(contact_link_idx, p_LQ_L - t * dlduv, -normal_L,
                                tau_ext, &f_L, &l_star_ls);
-      if(l_star_ls < l_star - alpha * t * dlduv.squaredNorm()) {
+      if (l_star_ls < l_star - alpha * t * dlduv.squaredNorm()) {
         break;
       }
       t *= beta;

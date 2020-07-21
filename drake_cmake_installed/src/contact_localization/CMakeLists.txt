@@ -12,10 +12,11 @@ add_library(gradient_calculator gradient_calculator.h gradient_calculator.cc)
 target_link_libraries(gradient_calculator mesh osqp_wrapper drake::drake)
 
 add_library(local_minimum_sampler local_minimum_sampler.h local_minimum_sampler.cc)
-target_link_libraries(local_minimum_sampler gradient_calculator proximity_wrapper)
+target_link_libraries(local_minimum_sampler gradient_calculator
+        proximity_wrapper lcm::lcm)
 
 add_executable(load_mesh try_loading_mesh.cc)
-target_link_libraries(load_mesh mesh lcm::lcm drake::drake osqp::osqp)
+target_link_libraries(load_mesh mesh drake::drake osqp::osqp)
 
 add_executable(try_osqp try_osqp.cc)
 target_link_libraries(try_osqp osqp_wrapper)
