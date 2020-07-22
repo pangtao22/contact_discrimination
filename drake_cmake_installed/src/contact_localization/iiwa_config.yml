@@ -22,11 +22,14 @@ active_link_indices:
   - 6
 num_samples_per_link: 1000
 
+# Detection threshold
+tau_ext_infinity_norm_threshold: 2
+
 # for proximity queries
 epsilon: 5.0e-4
 
 # Rejection sampling
-standard_deviation: 0.1
+standard_deviation: 0.5
 likelihood_threhold: 0.4
 
 # gradient descent
@@ -38,6 +41,7 @@ beta: 0.5
 max_step_size: 0.02
 
 # Sample points and normals path
+load_samples_from_files: false
 points_L_paths:
   - ""
   - ""

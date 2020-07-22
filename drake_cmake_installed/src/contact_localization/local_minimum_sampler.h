@@ -1,6 +1,7 @@
 #pragma once
 
 #include <drake/lcmt_contact_discrimination.hpp>
+#include <drake/lcmt_iiwa_status.hpp>
 #include <lcm/lcm-cpp.hpp>
 
 #include "gradient_calculator.h"
@@ -16,6 +17,7 @@ struct LocalMinimumSamplerConfig {
   // distance above the mesh, used for proximity queries.
   double epsilon{5e-4};
 
+  double tau_ext_infinity_norm_threshold{0};
   // Rejection sampling
   double optimal_cost_threshold;
 
@@ -70,9 +72,14 @@ class LocalMinimumSampler {
                           bool is_logging) const;
 
   void InitializeContactDiscriminationMsg() const;
-  void PublishGradientDescentResults() const;
+  void PublishGradientDescentMessages() const;
+  void PublishNoContactMessages() const;
   int get_max_num_small_cost_samples() const;
   int get_max_num_converged_samples() const;
+  void HandleIiwaStatusMessage(const lcm::ReceiveBuffer* rbuf,
+                     const std::string& chan,
+                     const drake::lcmt_iiwa_status* msg);
+  void RunLcm();
 
   std::vector<Eigen::Vector3d> get_points_log() const { return log_points_L_; }
   std::vector<Eigen::Vector3d> get_normals_log() const {

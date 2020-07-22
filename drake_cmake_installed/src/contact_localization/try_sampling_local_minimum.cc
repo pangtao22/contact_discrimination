@@ -42,10 +42,12 @@ int main() {
   cout << "compute time: " << duration.count() << endl;
 
   start = std::chrono::high_resolution_clock::now();
-  lm_sampler.PublishGradientDescentResults();
+  lm_sampler.PublishGradientDescentMessages();
   end = std::chrono::high_resolution_clock::now();
   duration = duration_cast<std::chrono::microseconds>(end - start);
   cout << "publish time: " << duration.count() << endl;
+
+  lm_sampler.RunLcm();
 
   return 0;
 }

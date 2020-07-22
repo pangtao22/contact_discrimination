@@ -1,12 +1,17 @@
 #include "local_minimum_sampler.h"
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
+#include <thread>
 
 #include <lcmtypes/bot_core/double_array_t.hpp>
+#include <lcmtypes/bot_core/pointcloud_t.hpp>
 #include <yaml-cpp/yaml.h>
 
+using Eigen::Map;
 using Eigen::Vector3d;
+using Eigen::VectorXd;
 using std::cout;
 using std::endl;
 using std::string;
@@ -51,6 +56,8 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
       config_yaml["num_samples_per_link"].as<size_t>();
 
   config.epsilon = config_yaml["epsilon"].as<double>();
+  config.tau_ext_infinity_norm_threshold =
+      config_yaml["tau_ext_infinity_norm_threshold"].as<double>();
 
   // Rejection sampling
   const double std = config_yaml["standard_deviation"].as<double>();
@@ -185,11 +192,6 @@ void LocalMinimumSampler::ComputeOptimalCostForSamples(
       }
     }
   }
-  //  cout << "cost threshold: " << config_.optimal_cost_threshold << endl;
-  //  for (const auto& link_idx : config_.active_link_indices) {
-  //    cout << "num small cost samples for link " << link_idx << " "
-  //         << small_cost_indices_[link_idx].size() << endl;
-  //  }
 }
 
 void LocalMinimumSampler::RunGradientDescentOnSmallCostSamples(
@@ -216,13 +218,13 @@ void LocalMinimumSampler::RunGradientDescentOnSmallCostSamples(
       }
     }
   }
-  //  for (int i = 0; i < config_.num_links; i++) {
-  //    cout << "num converged samples for link " << i << " "
-  //         << converged_samples_L_[i].size() << endl;
-  //  }
 }
 
 void LocalMinimumSampler::InitializeContactDiscriminationMsg() const {
+  msg_.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch())
+      .count();
+
   msg_.num_links = config_.active_link_indices.size();
   msg_.num_per_link = config_.num_samples_per_link;
 
@@ -238,7 +240,11 @@ void LocalMinimumSampler::InitializeContactDiscriminationMsg() const {
   }
 }
 
-void LocalMinimumSampler::PublishGradientDescentResults() const {
+void LocalMinimumSampler::PublishGradientDescentMessages() const {
+  msg_.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                       std::chrono::system_clock::now().time_since_epoch())
+                       .count();
+
   msg_.max_num_small_cost_per_link = get_max_num_small_cost_samples();
   msg_.max_num_converged_per_link = get_max_num_converged_samples();
 
@@ -277,11 +283,26 @@ void LocalMinimumSampler::PublishGradientDescentResults() const {
   lcm_->publish("CONTACT_DISCRIMINATION", &msg_);
 }
 
+void LocalMinimumSampler::PublishNoContactMessages() const {
+  msg_.max_num_small_cost_per_link = 0;
+  msg_.max_num_converged_per_link = 0;
+
+  for (const auto& link_idx : config_.active_link_indices) {
+    // Optimal cost for all samples.
+    const auto link_idx2 = link_idx - config_.active_link_indices[0];
+    std::fill(msg_.optimal_cost[link_idx2].begin(),
+              msg_.optimal_cost[link_idx2].end(), 0);
+    msg_.num_small_cost_per_link[link_idx2] = 0;
+    msg_.num_converged_per_link[link_idx2] = 0;
+  }
+
+  lcm_->publish("CONTACT_DISCRIMINATION", &msg_);
+}
+
 int LocalMinimumSampler::get_max_num_small_cost_samples() const {
   int n_max = 0;
   for (const auto& a : small_cost_indices_) {
     int n = a.size();
-    //    cout << "haha " << n << endl;
     if (n_max < n) {
       n_max = n;
     }
@@ -291,15 +312,41 @@ int LocalMinimumSampler::get_max_num_small_cost_samples() const {
 
 int LocalMinimumSampler::get_max_num_converged_samples() const {
   int n_max = 0;
-  //  cout << "huh? " << converged_samples_L_.size() << endl;
   for (const auto& a : converged_samples_L_) {
     int n = a.size();
-    //    cout << "hehe " << n << endl;
     if (n_max < n) {
       n_max = n;
     }
   }
   return n_max;
+}
+
+void LocalMinimumSampler::HandleIiwaStatusMessage(
+    const lcm::ReceiveBuffer* rbuf, const std::string& chan,
+    const drake::lcmt_iiwa_status* msg) {
+  Map<const VectorXd> q(msg->joint_position_commanded.data(), kNumPositions);
+  Map<const VectorXd> tau_ext(msg->joint_torque_external.data(), kNumPositions);
+
+  if (tau_ext.lpNorm<Eigen::Infinity>() <
+      config_.tau_ext_infinity_norm_threshold) {
+    PublishNoContactMessages();
+    std::this_thread::sleep_for(std::chrono::milliseconds(33));
+    return;
+  }
+  UpdateJacobians(q);
+  ComputeOptimalCostForSamples(tau_ext);
+  RunGradientDescentOnSmallCostSamples(tau_ext);
+  PublishGradientDescentMessages();
+}
+
+void LocalMinimumSampler::RunLcm() {
+  lcm::Subscription* sub = lcm_->subscribe(
+      "IIWA_STATUS_FILTERED",
+      &LocalMinimumSampler::HandleIiwaStatusMessage,this);
+  sub->setQueueCapacity(1);
+
+  while (0 == lcm_->handle()) {
+  }
 }
 
 bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
