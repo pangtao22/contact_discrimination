@@ -20,7 +20,7 @@ link_mesh_paths_suffix: ".obj"
 active_link_indices:
   - 5
   - 6
-num_samples_per_link: 1000
+num_samples_per_link: 500
 
 # Detection threshold
 tau_ext_infinity_norm_threshold: 2

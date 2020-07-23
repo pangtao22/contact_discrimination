@@ -97,7 +97,8 @@ LocalMinimumSampler::LocalMinimumSampler(
   for (int i = 0; i < config.num_links; i++) {
     p_queries_.push_back(nullptr);
     samples_optimal_cost_.emplace_back(Eigen::VectorXd::Constant(1, NAN));
-    small_cost_indices_.emplace_back(std::vector<size_t>());
+    small_cost_indices_.emplace_back(std::vector<int>());
+    converged_samples_indices_.emplace_back(std::vector<int>());
   }
   converged_samples_L_.resize(config.num_links);
   converged_samples_normals_L_.resize(config.num_links);
@@ -210,6 +211,7 @@ void LocalMinimumSampler::RunGradientDescentOnSmallCostSamples(
   double l_star_final;
 
   for (const auto& link_idx : config_.active_link_indices) {
+    converged_samples_indices_[link_idx].clear();
     converged_samples_L_[link_idx].clear();
     converged_samples_normals_L_[link_idx].clear();
 
@@ -217,9 +219,10 @@ void LocalMinimumSampler::RunGradientDescentOnSmallCostSamples(
       bool is_success = RunGradientDescentFromPointOnMesh(
           tau_ext, link_idx, samples_L_[link_idx].col(i),
           normals_L_[link_idx].col(i), &p_LQ_L_final, &normal_L_final,
-          &f_L_final, &dlduv_norm_final, &l_star_final, false);
+          &f_L_final, &dlduv_norm_final, &l_star_final, false, false);
 
       if (is_success && l_star_final < samples_optimal_cost_[link_idx][i]) {
+        converged_samples_indices_[link_idx].push_back(i);
         converged_samples_L_[link_idx].push_back(p_LQ_L_final);
         converged_samples_normals_L_[link_idx].push_back(normal_L_final);
       }
@@ -228,9 +231,7 @@ void LocalMinimumSampler::RunGradientDescentOnSmallCostSamples(
 }
 
 void LocalMinimumSampler::InitializeContactDiscriminationMsg() const {
-  msg_.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::system_clock::now().time_since_epoch())
-      .count();
+  set_msg_time();
 
   msg_.num_links = config_.active_link_indices.size();
   msg_.num_per_link = config_.num_samples_per_link;
@@ -239,6 +240,7 @@ void LocalMinimumSampler::InitializeContactDiscriminationMsg() const {
   msg_.num_small_cost_per_link.resize(msg_.num_links);
   msg_.small_cost_indices.resize(msg_.num_links);
   msg_.num_converged_per_link.resize(msg_.num_links);
+  msg_.converged_indices.resize(msg_.num_links);
   msg_.points_L.resize(msg_.num_links);
 
   for (const auto& link_idx : config_.active_link_indices) {
@@ -248,10 +250,7 @@ void LocalMinimumSampler::InitializeContactDiscriminationMsg() const {
 }
 
 void LocalMinimumSampler::PublishGradientDescentMessages() const {
-  msg_.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                       std::chrono::system_clock::now().time_since_epoch())
-                       .count();
-
+  set_msg_time();
   msg_.max_num_small_cost_per_link = get_max_num_small_cost_samples();
   msg_.max_num_converged_per_link = get_max_num_converged_samples();
 
@@ -274,6 +273,7 @@ void LocalMinimumSampler::PublishGradientDescentMessages() const {
     // Converged samples.
     msg_.num_converged_per_link[link_idx2] =
         converged_samples_L_[link_idx].size();
+    msg_.converged_indices[link_idx2].resize(msg_.max_num_converged_per_link);
     msg_.points_L[link_idx2].resize(msg_.max_num_converged_per_link);
 
     for (int i = 0; i < msg_.max_num_converged_per_link; i++) {
@@ -281,6 +281,8 @@ void LocalMinimumSampler::PublishGradientDescentMessages() const {
     }
 
     for (int i = 0; i < converged_samples_L_[link_idx].size(); i++) {
+      msg_.converged_indices[link_idx2][i] =
+          converged_samples_indices_[link_idx][i];
       const Vector3d& p = converged_samples_L_[link_idx][i];
       msg_.points_L[link_idx2][i][0] = p[0];
       msg_.points_L[link_idx2][i][1] = p[1];
@@ -288,6 +290,12 @@ void LocalMinimumSampler::PublishGradientDescentMessages() const {
     }
   }
   lcm_->publish("CONTACT_DISCRIMINATION", &msg_);
+}
+
+void LocalMinimumSampler::set_msg_time() const {
+  msg_.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch())
+      .count();
 }
 
 void LocalMinimumSampler::PublishNoContactMessages() const {
@@ -303,7 +311,6 @@ void LocalMinimumSampler::PublishNoContactMessages() const {
     msg_.num_small_cost_per_link[link_idx2] = 0;
     msg_.num_converged_per_link[link_idx2] = 0;
   }
-
   lcm_->publish("CONTACT_DISCRIMINATION", &msg_);
 }
 
@@ -365,7 +372,7 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_L_final, double* dlduv_norm_final,
-    double* l_star_final, bool is_logging) const {
+    double* l_star_final, bool is_logging, bool project_to_mesh) const {
   // Initialize quantities needed for gradient descent.
   Vector3d dldp;
   double l_star;
@@ -387,7 +394,11 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
                                &dldp, &f_L, &l_star)) {
       return false;
     }
-    dlduv = dldp - normal_L * dldp.dot(normal_L);
+    if (project_to_mesh) {
+      dlduv = dldp - normal_L * dldp.dot(normal_L);
+    } else {
+      dlduv = dldp;
+    }
 
     // Logging.
     if (is_logging) {
@@ -427,14 +438,15 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
     p_LQ_L += -t * dlduv;
 
     // Project p_LQ_L back to mesh
-    Vector3d p_LQ_L_mesh;
-    size_t triangle_idx;
-    double distance;
-    p_LQ_L += normal_L * 2 * config_.epsilon;
-    p_queries_[contact_link_idx]->FindClosestPoint(
-        p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx, &distance);
-    p_LQ_L = p_LQ_L_mesh;
-
+    if (project_to_mesh) {
+      Vector3d p_LQ_L_mesh;
+      size_t triangle_idx;
+      double distance;
+      p_LQ_L += normal_L * 2 * config_.epsilon;
+      p_queries_[contact_link_idx]->FindClosestPoint(
+          p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx, &distance);
+      p_LQ_L = p_LQ_L_mesh;
+    }
     iter_count++;
   }
 
@@ -456,7 +468,7 @@ bool LocalMinimumSampler::SampleLocalMinimum(
     const size_t contact_link_idx, drake::EigenPtr<Vector3d> p_LQ_L_final,
     drake::EigenPtr<Vector3d> normal_L_final,
     drake::EigenPtr<Vector3d> f_W_final, double* dlduv_norm_final,
-    double* l_star_final, bool is_logging) const {
+    double* l_star_final, bool is_logging, bool project_to_mesh) const {
   // Sample a point on mesh and get its normal.
   Vector3d p_LQ_L;
   Vector3d normal_L;
@@ -468,5 +480,5 @@ bool LocalMinimumSampler::SampleLocalMinimum(
   UpdateJacobians(q);
   return RunGradientDescentFromPointOnMesh(
       tau_ext, contact_link_idx, p_LQ_L, normal_L, p_LQ_L_final, normal_L_final,
-      f_W_final, dlduv_norm_final, l_star_final, is_logging);
+      f_W_final, dlduv_norm_final, l_star_final, is_logging, project_to_mesh);
 }

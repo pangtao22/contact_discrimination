@@ -60,7 +60,7 @@ class LocalMinimumSampler {
       drake::EigenPtr<Eigen::Vector3d> p_LQ_L_final,
       drake::EigenPtr<Eigen::Vector3d> normal_L_final,
       drake::EigenPtr<Eigen::Vector3d> f_L_final, double* dlduv_norm_final,
-      double* l_star_final, bool is_logging) const;
+      double* l_star_final, bool is_logging, bool project_to_mesh) const;
 
   bool SampleLocalMinimum(const Eigen::Ref<const Eigen::VectorXd>& q,
                           const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
@@ -69,7 +69,7 @@ class LocalMinimumSampler {
                           drake::EigenPtr<Eigen::Vector3d> normal_L_final,
                           drake::EigenPtr<Eigen::Vector3d> f_W_final,
                           double* dlduv_norm_final, double* l_star_final,
-                          bool is_logging) const;
+                          bool is_logging, bool project_to_mesh) const;
 
   void InitializeContactDiscriminationMsg() const;
   void PublishSamples() const;
@@ -77,6 +77,7 @@ class LocalMinimumSampler {
   void PublishNoContactMessages() const;
   int get_max_num_small_cost_samples() const;
   int get_max_num_converged_samples() const;
+  inline void set_msg_time() const;
   void HandleIiwaStatusMessage(const lcm::ReceiveBuffer* rbuf,
                      const std::string& chan,
                      const drake::lcmt_iiwa_status* msg);
@@ -103,9 +104,10 @@ class LocalMinimumSampler {
 
   // Rejection sampling.
   mutable std::vector<Eigen::VectorXd> samples_optimal_cost_;
-  mutable std::vector<std::vector<size_t>> small_cost_indices_;
+  mutable std::vector<std::vector<int>> small_cost_indices_;
 
   // Converged samples from rejection sampling.
+  mutable std::vector<std::vector<int>> converged_samples_indices_;
   mutable std::vector<std::vector<Eigen::Vector3d>> converged_samples_L_;
   mutable std::vector<std::vector<Eigen::Vector3d>>
       converged_samples_normals_L_;
