@@ -72,6 +72,7 @@ class LocalMinimumSampler {
                           bool is_logging) const;
 
   void InitializeContactDiscriminationMsg() const;
+  void PublishSamples() const;
   void PublishGradientDescentMessages() const;
   void PublishNoContactMessages() const;
   int get_max_num_small_cost_samples() const;

@@ -111,28 +111,15 @@ LocalMinimumSampler::LocalMinimumSampler(
     samples_optimal_cost_[link_idx].resize(config_.num_samples_per_link);
   }
 
-  // Generate samples on links.
   GenerateSamples();
-
   InitializeContactDiscriminationMsg();
-
-  // publish samples
-  for (const auto& link_idx : config.active_link_indices) {
-    bot_core::double_array_t point_array;
-    point_array.num_values = samples_L_[link_idx].size();
-    Eigen::Map<Eigen::ArrayXd> data(samples_L_[link_idx].data(),
-                                    samples_L_[link_idx].size());
-    point_array.values.resize(point_array.num_values);
-    for (int i = 0; i < point_array.num_values; i++) {
-      point_array.values[i] = data[i];
-    }
-    lcm_->publish("SAMPLES_LINK_" + std::to_string(link_idx), &point_array);
-  }
+  PublishSamples();
 }
 
 LocalMinimumSampler::LocalMinimumSampler(const string& config_file_path)
     : LocalMinimumSampler(
-          LoadLocalMinimumSamplerConfigFromYaml(config_file_path)) {}
+    LoadLocalMinimumSamplerConfigFromYaml(config_file_path)) {}
+
 
 void LocalMinimumSampler::GenerateSamples() {
   for (int i = 0; i < config_.num_links; i++) {
@@ -173,6 +160,26 @@ void LocalMinimumSampler::GenerateSamples() {
     }
   }
 }
+
+void LocalMinimumSampler::PublishSamples() const {
+  bot_core::double_array_t point_array;
+  const size_t n_links = config_.active_link_indices.size();
+  const size_t n_doubles = samples_L_[config_.active_link_indices[0]].size();
+  point_array.num_values = n_doubles * n_links;
+  point_array.values.resize(point_array.num_values);
+
+  size_t i_start = 0;
+  for (const auto& link_idx : config_.active_link_indices) {
+    Eigen::Map<const Eigen::ArrayXd> data(samples_L_[link_idx].data(),
+                                    samples_L_[link_idx].size());
+    for (int i = 0; i < data.size(); i++) {
+      point_array.values[i_start + i] = data[i];
+    }
+    i_start += data.size();
+  }
+  lcm_->publish("LINK_SAMPLES", &point_array);
+}
+
 
 void LocalMinimumSampler::ComputeOptimalCostForSamples(
     const Eigen::Ref<const Eigen::VectorXd>& tau_ext) const {
@@ -291,7 +298,8 @@ void LocalMinimumSampler::PublishNoContactMessages() const {
     // Optimal cost for all samples.
     const auto link_idx2 = link_idx - config_.active_link_indices[0];
     std::fill(msg_.optimal_cost[link_idx2].begin(),
-              msg_.optimal_cost[link_idx2].end(), 0);
+              msg_.optimal_cost[link_idx2].end(),
+              std::numeric_limits<double>::infinity());
     msg_.num_small_cost_per_link[link_idx2] = 0;
     msg_.num_converged_per_link[link_idx2] = 0;
   }
