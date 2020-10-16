@@ -12,19 +12,22 @@ PYBIND11_MODULE(py_local_minimum_sampler, m) {
   py::class_<Class>(m, "LocalMinimumSampler")
       .def(py::init<std::string>())
       .def("UpdateJacobians", &Class::UpdateJacobians)
+      .def("ComputeOptimalCostForSamples", &Class::ComputeOptimalCostForSamples)
       .def("SampleLocalMinimum",
            [](const Class* self, const Eigen::Ref<const Eigen::VectorXd>& q,
               const Eigen::Ref<const Eigen::VectorXd>& tau_ext,
               const size_t contact_link_idx,
               Eigen::Ref<Eigen::Vector3d>& p_LQ_L_final,
               Eigen::Ref<Eigen::Vector3d>& normal_L_final,
-              Eigen::Ref<Eigen::Vector3d>& f_W_final) {
+              Eigen::Ref<Eigen::Vector3d>& f_W_final,
+              bool project_to_mesh) {
              double dlduv_norm_final;
              double l_star_final;
              return self->SampleLocalMinimum(q, tau_ext, contact_link_idx,
                                       &p_LQ_L_final,
                                       &normal_L_final, &f_W_final,
-                                      &dlduv_norm_final, &l_star_final, true);
+                                      &dlduv_norm_final, &l_star_final, true,
+                                      project_to_mesh);
            })
       .def("RunGradientDescentFromPointOnMesh",
            [](const Class* self,
@@ -34,14 +37,17 @@ PYBIND11_MODULE(py_local_minimum_sampler, m) {
               const Eigen::Ref<const Eigen::Vector3d>& normal_L_initial,
               Eigen::Ref<Eigen::Vector3d>& p_LQ_L_final,
               Eigen::Ref<Eigen::Vector3d>& normal_L_final,
-              Eigen::Ref<Eigen::Vector3d>& f_W_final) {
+              Eigen::Ref<Eigen::Vector3d>& f_W_final,
+              bool project_to_mesh) {
              double dlduv_norm_final;
              double l_star_final;
              return self->RunGradientDescentFromPointOnMesh(
                  tau_ext, contact_link_idx, p_LQ_L_initial,
                  normal_L_initial, &p_LQ_L_final, &normal_L_final, &f_W_final,
-                 &dlduv_norm_final, &l_star_final, true);
+                 &dlduv_norm_final, &l_star_final, true, project_to_mesh);
            })
+      .def("get_mesh_samples", &Class::get_mesh_samples)
+      .def("get_samples_optimal_cost", &Class::get_samples_optimal_cost)
       .def("get_points_log", &Class::get_points_log)
       .def("get_normals_log", &Class::get_normals_log)
       .def("get_dlduv_norm_log", &Class::get_dlduv_norm_log)

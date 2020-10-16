@@ -12,7 +12,7 @@ link_names:
   - "iiwa_link_7"
 
 num_friction_cone_rays: 4
-friction_coefficient: 1.0
+friction_coefficient: 2.0
 
 # local minimum sampler config
 link_mesh_paths_prefix: "/Users/pangtao/PycharmProjects/contact_aware_control/contact_particle_filter/iiwa7_shifted_meshes/link_"

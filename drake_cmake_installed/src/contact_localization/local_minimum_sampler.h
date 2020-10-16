@@ -1,4 +1,5 @@
 #pragma once
+#include <tuple>
 
 #include <drake/lcmt_contact_discrimination.hpp>
 #include <drake/lcmt_iiwa_status.hpp>
@@ -79,8 +80,8 @@ class LocalMinimumSampler {
   int get_max_num_converged_samples() const;
   inline void set_msg_time() const;
   void HandleIiwaStatusMessage(const lcm::ReceiveBuffer* rbuf,
-                     const std::string& chan,
-                     const drake::lcmt_iiwa_status* msg);
+                               const std::string& chan,
+                               const drake::lcmt_iiwa_status* msg);
   void RunLcm();
 
   std::vector<Eigen::Vector3d> get_points_log() const { return log_points_L_; }
@@ -89,6 +90,13 @@ class LocalMinimumSampler {
   }
   std::vector<double> get_dlduv_norm_log() const { return log_dlduv_norm_; }
   std::vector<double> get_l_star_log() const { return log_l_star_; }
+  std::tuple<std::vector<Eigen::Matrix3Xd>, std::vector<Eigen::Matrix3Xd>>
+  get_mesh_samples() const {
+    return {samples_L_, normals_L_};
+  }
+  std::vector<Eigen::VectorXd> get_samples_optimal_cost() const {
+    return samples_optimal_cost_;
+  }
 
  private:
   void GenerateSamples();

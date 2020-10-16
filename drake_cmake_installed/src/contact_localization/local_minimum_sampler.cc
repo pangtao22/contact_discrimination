@@ -219,7 +219,7 @@ void LocalMinimumSampler::RunGradientDescentOnSmallCostSamples(
       bool is_success = RunGradientDescentFromPointOnMesh(
           tau_ext, link_idx, samples_L_[link_idx].col(i),
           normals_L_[link_idx].col(i), &p_LQ_L_final, &normal_L_final,
-          &f_L_final, &dlduv_norm_final, &l_star_final, false, false);
+          &f_L_final, &dlduv_norm_final, &l_star_final, false, true);
 
       if (is_success && l_star_final < samples_optimal_cost_[link_idx][i]) {
         converged_samples_indices_[link_idx].push_back(i);
@@ -339,7 +339,7 @@ int LocalMinimumSampler::get_max_num_converged_samples() const {
 void LocalMinimumSampler::HandleIiwaStatusMessage(
     const lcm::ReceiveBuffer* rbuf, const std::string& chan,
     const drake::lcmt_iiwa_status* msg) {
-  Map<const VectorXd> q(msg->joint_position_commanded.data(), kNumPositions);
+  Map<const VectorXd> q(msg->joint_position_measured.data(), kNumPositions);
   Map<const VectorXd> tau_ext(msg->joint_torque_external.data(), kNumPositions);
 
   if (tau_ext.lpNorm<Eigen::Infinity>() <
