@@ -40,6 +40,10 @@ target_link_libraries(try_sampling_local_minimum local_minimum_sampler yaml-cpp)
 add_executable(try_autodiff try_autodiff.cc)
 target_link_libraries(try_autodiff drake::drake)
 
+add_executable(run_local_minimum_sampler_lcm run_local_minimum_sampler_lcm.cc)
+target_link_libraries(run_local_minimum_sampler_lcm local_minimum_sampler
+        yaml-cpp)
+
 # Python bindings
 find_package(pybind11 CONFIG REQUIRED)
 

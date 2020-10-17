@@ -26,28 +26,29 @@ int main() {
   tau_ext << 9.66613398e-01, -2.82202806e+00, -1.60744425e-03,  6.62280818e-01,
       3.19086728e-02,  8.17417009e-02,  0;
 
-  const size_t contact_link_idx = 5;
   Vector3d p_LQ_L_final;
   Vector3d normal_L_final;
   Vector3d f_W_final;
-  double dlduv_norm_final;
-  double l_star_final;
 
-  auto start = std::chrono::high_resolution_clock::now();
   lm_sampler.UpdateJacobians(q);
+  auto start = std::chrono::high_resolution_clock::now();
   lm_sampler.ComputeOptimalCostForSamples(tau_ext);
-  lm_sampler.RunGradientDescentOnSmallCostSamples(tau_ext);
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = duration_cast<std::chrono::microseconds>(end - start);
-  cout << "compute time: " << duration.count() << endl;
+  cout << "QP time for all samples: " << duration.count() << endl;
+
+  start = std::chrono::high_resolution_clock::now();
+  lm_sampler.RunGradientDescentOnSmallCostSamples(tau_ext);
+  end = std::chrono::high_resolution_clock::now();
+  duration = duration_cast<std::chrono::microseconds>(end - start);
+  cout << "Gradient descent time for small-cost samples: "
+       << duration.count() << endl;
 
   start = std::chrono::high_resolution_clock::now();
   lm_sampler.PublishGradientDescentMessages();
   end = std::chrono::high_resolution_clock::now();
   duration = duration_cast<std::chrono::microseconds>(end - start);
   cout << "publish time: " << duration.count() << endl;
-
-  lm_sampler.RunLcm();
 
   return 0;
 }
