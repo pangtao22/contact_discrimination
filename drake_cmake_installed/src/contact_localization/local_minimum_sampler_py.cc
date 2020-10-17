@@ -51,5 +51,6 @@ PYBIND11_MODULE(py_local_minimum_sampler, m) {
       .def("get_points_log", &Class::get_points_log)
       .def("get_normals_log", &Class::get_normals_log)
       .def("get_dlduv_norm_log", &Class::get_dlduv_norm_log)
-      .def("get_l_star_log", &Class::get_l_star_log);
+      .def("get_l_star_log", &Class::get_l_star_log)
+      .def("get_num_line_searches", &Class::get_num_line_searches);
 }

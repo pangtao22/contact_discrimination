@@ -386,6 +386,7 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
   log_normals_L_.clear();
   log_dlduv_norm_.clear();
   log_l_star_.clear();
+  log_num_line_searches_.clear();
 
   bool is_stuck = false;
 
@@ -398,14 +399,6 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
       dlduv = dldp - normal_L * dldp.dot(normal_L);
     } else {
       dlduv = dldp;
-    }
-
-    // Logging.
-    if (is_logging) {
-      log_points_L_.push_back(p_LQ_L);
-      log_normals_L_.push_back(normal_L);
-      log_dlduv_norm_.push_back(dlduv.norm());
-      log_l_star_.push_back(l_star);
     }
 
     if (dlduv.norm() < config_.gradient_norm_convergence_threshold) {
@@ -435,6 +428,16 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
       break;
     }
 
+    // Logging.
+    if (is_logging) {
+      log_points_L_.push_back(p_LQ_L);
+      log_normals_L_.push_back(normal_L);
+      log_dlduv_norm_.push_back(dlduv.norm());
+      log_l_star_.push_back(l_star);
+      log_num_line_searches_.push_back(line_search_steps);
+    }
+
+    // Update contact point using the found step size and gradient.
     p_LQ_L += -t * dlduv;
 
     // Project p_LQ_L back to mesh
@@ -445,6 +448,11 @@ bool LocalMinimumSampler::RunGradientDescentFromPointOnMesh(
       p_LQ_L += normal_L * 2 * config_.epsilon;
       p_queries_[contact_link_idx]->FindClosestPoint(
           p_LQ_L, &p_LQ_L_mesh, &normal_L, &triangle_idx, &distance);
+      if (distance > 0.02) {
+        // Most likely the point is off the mesh.
+        return false;
+      }
+
       p_LQ_L = p_LQ_L_mesh;
     }
     iter_count++;

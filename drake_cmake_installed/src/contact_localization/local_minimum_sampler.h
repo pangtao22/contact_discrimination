@@ -97,6 +97,9 @@ class LocalMinimumSampler {
   std::vector<Eigen::VectorXd> get_samples_optimal_cost() const {
     return samples_optimal_cost_;
   }
+  std::vector<size_t> get_num_line_searches() const {
+    return log_num_line_searches_;
+  }
 
  private:
   void GenerateSamples();
@@ -125,4 +128,5 @@ class LocalMinimumSampler {
   mutable std::vector<Eigen::Vector3d> log_normals_L_;
   mutable std::vector<double> log_dlduv_norm_;
   mutable std::vector<double> log_l_star_;
+  mutable std::vector<size_t> log_num_line_searches_;
 };
