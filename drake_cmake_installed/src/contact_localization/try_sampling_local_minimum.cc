@@ -37,6 +37,8 @@ int main() {
   auto duration = duration_cast<std::chrono::microseconds>(end - start);
   cout << "QP time for all samples: " << duration.count() << endl;
 
+  lm_sampler.print_num_small_cost_samples();
+
   start = std::chrono::high_resolution_clock::now();
   lm_sampler.RunGradientDescentOnSmallCostSamples(tau_ext);
   end = std::chrono::high_resolution_clock::now();

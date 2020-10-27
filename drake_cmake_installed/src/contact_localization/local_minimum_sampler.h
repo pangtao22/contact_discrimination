@@ -1,5 +1,6 @@
 #pragma once
 #include <tuple>
+#include <iostream>
 
 #include <drake/lcmt_contact_discrimination.hpp>
 #include <drake/lcmt_iiwa_status.hpp>
@@ -99,6 +100,22 @@ class LocalMinimumSampler {
   }
   std::vector<size_t> get_num_line_searches() const {
     return log_num_line_searches_;
+  }
+
+  void print_num_small_cost_samples() const {
+    size_t num_small_cost_samples = 0;
+    size_t num_samples = 0;
+
+    for (const auto i : config_.active_link_indices) {
+      num_samples += samples_L_[i].cols();
+    }
+
+    for (const auto i : config_.active_link_indices) {
+      num_small_cost_samples += small_cost_indices_[i].size();
+    }
+
+    std::cout << "Num small cost samples / all samples: "
+              << num_small_cost_samples << "/" << num_samples << std::endl;
   }
 
  private:
