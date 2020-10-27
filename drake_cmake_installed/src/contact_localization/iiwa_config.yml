@@ -29,8 +29,8 @@ tau_ext_infinity_norm_threshold: 2
 epsilon: 5.0e-4
 
 # Rejection sampling
-standard_deviation: 0.5
-likelihood_threhold: 0.4
+standard_deviation: 0.5 # For visualization only.
+optimal_cost_threshold: 0.13
 
 # gradient descent
 iterations_limit: 50

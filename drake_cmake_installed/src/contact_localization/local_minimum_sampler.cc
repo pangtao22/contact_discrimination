@@ -60,9 +60,8 @@ LocalMinimumSamplerConfig LoadLocalMinimumSamplerConfigFromYaml(
       config_yaml["tau_ext_infinity_norm_threshold"].as<double>();
 
   // Rejection sampling
-  const double std = config_yaml["standard_deviation"].as<double>();
   config.optimal_cost_threshold =
-      -std * std * std::log(config_yaml["likelihood_threhold"].as<double>());
+      config_yaml["optimal_cost_threshold"].as<double>();
 
   // Gradient descent parameters.
   config.iterations_limit = config_yaml["iterations_limit"].as<size_t>();
@@ -242,6 +241,7 @@ void LocalMinimumSampler::InitializeContactDiscriminationMsg() const {
   msg_.num_converged_per_link.resize(msg_.num_links);
   msg_.converged_indices.resize(msg_.num_links);
   msg_.points_L.resize(msg_.num_links);
+  msg_.normals_L.resize(msg_.num_links);
 
   for (const auto& link_idx : config_.active_link_indices) {
     const auto link_idx2 = link_idx - config_.active_link_indices[0];
@@ -275,9 +275,11 @@ void LocalMinimumSampler::PublishGradientDescentMessages() const {
         converged_samples_L_[link_idx].size();
     msg_.converged_indices[link_idx2].resize(msg_.max_num_converged_per_link);
     msg_.points_L[link_idx2].resize(msg_.max_num_converged_per_link);
+    msg_.normals_L[link_idx2].resize(msg_.max_num_converged_per_link);
 
     for (int i = 0; i < msg_.max_num_converged_per_link; i++) {
       msg_.points_L[link_idx2][i].resize(3);
+      msg_.normals_L[link_idx2][i].resize(3);
     }
 
     for (int i = 0; i < converged_samples_L_[link_idx].size(); i++) {
@@ -287,6 +289,11 @@ void LocalMinimumSampler::PublishGradientDescentMessages() const {
       msg_.points_L[link_idx2][i][0] = p[0];
       msg_.points_L[link_idx2][i][1] = p[1];
       msg_.points_L[link_idx2][i][2] = p[2];
+
+      const Vector3d& n = converged_samples_normals_L_[link_idx][i];
+      msg_.normals_L[link_idx2][i][0] = n[0];
+      msg_.normals_L[link_idx2][i][1] = n[1];
+      msg_.normals_L[link_idx2][i][2] = n[2];
     }
   }
   lcm_->publish("CONTACT_DISCRIMINATION", &msg_);
